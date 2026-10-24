@@ -68,7 +68,8 @@ const host = {
 A host also says how a name of the module becomes one of its states
 (`state`), which of its own words an author may not redefine (`reserved`), and,
 optionally, how its own syntax becomes Python before the translation
-(`rewrite`). For a component, it hands over the functions its template
+(`rewrite`), and which words the JavaScript reads in place of the author's
+(`translate`). For a component, it hands over the functions its template
 compiled to (`defs`), which Brycomp joins after the script, each where its
 markup stands; a host whose template reads a key with a dot writes them with
 `templateDots` first. Every member is described in `src/bryc.js`, Brycomp's

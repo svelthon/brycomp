@@ -228,6 +228,29 @@ test("the host's rewrite runs before the translation, and a host with none leave
     expect(bryc.compile(plain, 'x = TWO\n', options).src).toBe('x = TWO\n');
 });
 
+// **And the JavaScript is compiled from the words the host has it read**
+// (`host.translate`), handed the tree the analysis read and the names
+// JavaScript gives the module, while the analysis and the source stay the
+// author's.
+test("the host's translate gives the JavaScript its words, and leaves the analysis the author's", () => {
+    const told = [];
+    const translating = {
+        ...plain,
+        translate: (text, tree, names) => {
+            told.push([tree.body.length, [...names]]);
+            return text.replace('first', 'other');
+        }
+    };
+    const options = { name: 'a', source: 'src/a.py', jsNames: ['shown'] };
+    const compiled = bryc.compile(translating, 'x = first\n', options);
+
+    expect(told).toEqual([[1, ['shown']]]);
+    expect(compiled.js).toContain("'other'");
+    expect(compiled.js).not.toContain("'first'");
+    expect(compiled.src).toBe('x = first\n');
+    expect(compiled.root._ast.body[0].value.id).toBe('first');
+});
+
 // **The namespace a Python body runs in is a view of the accessors it inherits**:
 // made from them through the host's runtime, flagged `$proxy` so that Brython
 // reads a global through the prototype chain, and known to Python by its

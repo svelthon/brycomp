@@ -62,6 +62,13 @@
 //            translation, `rewrite(text, { source, lineOffset, component,
 //            bound })` answering the text, `bound` the names `importjs`
 //            binds. A host with no syntax of its own leaves it out.
+//   translate
+//            optional: the text the JavaScript is compiled from, when the host
+//            has it read other words than the author's at places the analysis
+//            read, `translate(text, tree, names)` answering it, `tree` the AST
+//            of `text` and `names` those JavaScript gives the module. Each word
+//            keeps its line and its columns; the analysis, and what an error
+//            quotes, stay on `text`.
 //   runes    optional: the names the framework's compiler reads as its own
 //            once a binding of the module takes them, `$effect` read as a
 //            store once `effect` is bound: `['state', 'derived', 'effect', …]`

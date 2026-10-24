@@ -84,14 +84,25 @@ function compilePython(host, text, { name, source, named = null, lineOffset = 0,
 // with a binding of those names that never runs, and reads each at run time,
 // the module's first and the builtins after, as it reads any name the module
 // binds. What was read off `root` stays on what the author wrote.
+//
+// And what the host has the JavaScript read in place of the author's words
+// (`host.translate`), on the same lines and at the same columns, from the
+// tree the analysis read and the names JavaScript gives the module: compiled
+// again as well, while what the analysis read, and what an error quotes, stays
+// the author's.
 function translation(host, root, names, options) {
     const $B = engine();
     const shadowing = [...new Set(names.map(pythonName))].filter(
         (n) => n in $B.builtins && /^[A-Za-z_]\w*$/.test(n) && !['None', 'True', 'False', '__debug__'].includes(n)
     );
+    const text = host.translate === undefined ? options.src : host.translate(options.src, root._ast, names);
 
-    return (
-        shadowing.length ? compilePython(host, `${options.src}\nif False:\n    ${shadowing.join(' = ')} = None\n`, options) : root
+    if (!shadowing.length && text === options.src) return root.to_js();
+
+    return compilePython(
+        host,
+        shadowing.length ? `${text}\nif False:\n    ${shadowing.join(' = ')} = None\n` : text,
+        options
     ).to_js();
 }
 
