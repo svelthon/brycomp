@@ -66,6 +66,17 @@ test('under the name Python reads', () => {
     expect(bryc.jsNameBindings(host, { jsImported: [], declared: [], source: 'a.py' }, ['ﬁeld'])).toEqual([`bind(${P}, 'field', () => jsCall(ﬁeld));`]);
 });
 
+// A name of the JavaScript beside the module read as the host reads one: in a
+// scope the host fills with names of its own, the bare name could be one.
+test('a name of the JavaScript beside the module is read as the host reads one', () => {
+    const reading = { ...host, moduleName: (n) => `module[${JSON.stringify(n)}]` };
+
+    expect(bryc.jsNameBindings(reading, { jsImported: ['navigate'], declared: [], source }, ['amount', 'navigate'])).toEqual([
+        `bind(${P}, 'navigate', () => jsCall(navigate), () => readOnly("navigate", "src/a.py"));`,
+        `bind(${P}, 'amount', () => jsCall(module["amount"]));`
+    ]);
+});
+
 // **An import named like one of the framework's own words is held under
 // another variable** (`host.runes`), the one its compiler leaves alone, and
 // published to Python under its own name: Svelte reads `$effect` as a store

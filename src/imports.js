@@ -367,11 +367,14 @@ function jsNameBindings(host, { jsImported, declared, source }, extra = []) {
     // through `globals()` or from another module, is refused as JavaScript
     // refuses it, rather than taken by Python's reader and missed by
     // JavaScript's.
-    // An import is read off the variable it is held under (`jsLocal`).
+    // An import is read off the variable it is held under (`jsLocal`). A name of
+    // the `<script module>` is read as the host reads one (`host.moduleName`),
+    // or bare: in a scope the host fills with names of its own, a bare read
+    // could find one of them first.
     return names.map((n) =>
         jsImported.includes(n)
             ? `${bind}(${PROTO}, '${pythonName(n)}', () => ${jsCall}(${jsLocal(host, n)}), () => ${readOnlyImport}(${JSON.stringify(n)}, ${JSON.stringify(source)}));`
-            : `${bind}(${PROTO}, '${pythonName(n)}', () => ${jsCall}(${n}));`
+            : `${bind}(${PROTO}, '${pythonName(n)}', () => ${jsCall}(${host.moduleName === undefined ? n : host.moduleName(n)}));`
     );
 }
 
