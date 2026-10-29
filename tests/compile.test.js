@@ -286,6 +286,16 @@ test('the accessor reads and writes the cell as the host does, through track', (
     );
 });
 
+// Told the name with the cell, on either branch, so a host reads the rows'
+// cell as it reads the name: it was told the cell alone there.
+test('the host reads the cell for the rows of a loop knowing the name, as it reads the name', () => {
+    const told = [];
+    const naming = { ...host, state: { ...host.state, value: (cell, name) => (told.push(name), `${cell}.value`) } };
+    bryc.stateBinding(naming, 'go', '__fn_go');
+
+    expect(told).toEqual(['go']);
+});
+
 test("an instance signs its containers onto its own list, and a function's accessor hands what it holds", () => {
     const line = bryc.stateBinding(host, 'go', '__fn_go', { subs: '__subs', held: '__fn_go' });
 

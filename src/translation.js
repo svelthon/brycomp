@@ -282,7 +282,9 @@ const stateCell = (host, name, cell) => host.state.cell(name, cell, bump(name));
 // invalidates every reader, without the value ever changing identity. Except
 // for the rows of a template's loop (`SHAPING`), which follow the value's own
 // changes and what they read under it, off the cell itself
-// (`host.state.value`).
+// (`host.state.value`). Both are told the name with the cell, so a host reads
+// either as it reads the other: a cleanup run while the rows are computed is
+// handed the cell by the one, as any cleanup is by the other.
 //
 // A write that changes nothing leaves the cell as it was (`changesNothing`), as
 // a framework's state is left by a value `===` to the one it holds: a float
@@ -302,7 +304,7 @@ function stateBinding(host, name, cell, { subs = null, held = null } = {}) {
         ` if (!${changesNothing}(__written, __was)) ${host.state.write(cell, '__written')};`;
 
     return (
-        `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${host.state.value(cell)}) : ${host.state.read(name, cell)}), ` +
+        `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${host.state.value(cell, name)}) : ${host.state.read(name, cell)}), ` +
         `(${NEXT_VALUE}) => { ${write} }${held === null ? '' : `, () => ${held}`});`
     );
 }
