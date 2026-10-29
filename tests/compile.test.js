@@ -338,3 +338,13 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __expr_0(row):\n    return __text(readAttr(row, "name"))');
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __expr_set_0(value, row):\n    writeAttr(row, "label", value)');
 });
+
+// A comprehension's target reads what it assigns into, `row` in
+// `for row["flag"] in …`, at each step: a parameter handed late is read there
+// as everywhere, a call, where the target was left as it was and assigned
+// into the function standing for the row.
+test("a parameter handed late is called where a comprehension's target reads it", () => {
+    const late = 'def __expr_0_late(row):\n    return (0 for row["flag"] in [1, 2])';
+
+    expect(bryc.templateDots(host, late)).toBe('def __expr_0_late(row):\n    return (0 for row()["flag"] in [1, 2])');
+});

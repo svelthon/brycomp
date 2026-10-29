@@ -135,8 +135,13 @@ function templateDots(host, def) {
 
         let inner = shadowed;
 
+        // A target reads what it assigns into, `row` in `for row["flag"] in …`,
+        // where each step assigns, inside the comprehension: read as every
+        // other read there is, a call when it is a parameter handed late. Its
+        // own names are stored, never read, and left as they are.
         node.generators.forEach((one, index) => {
             visit(one.iter, index === 0 ? shadowed : inner);
+            visit(one.target, inner);
             inner = within(inner, targets(one.target));
             for (const test of one.ifs) visit(test, inner);
         });
