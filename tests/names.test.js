@@ -154,3 +154,12 @@ test('a module that does not ship is refused on its line, with what the host say
     expect(missing('browser')).not.toThrow();
     expect(missing('cart', () => 'file')).not.toThrow();
 });
+
+// What the host says stands in is read among its own names: a module named like
+// a property of `Object.prototype` got the function the prototype holds there,
+// `; function Object() { [native code] }`, at the end of its refusal.
+test('a missing module named like a property of Object.prototype is refused as any other', () => {
+    for (const module of ['constructor', 'toString', 'hasOwnProperty']) {
+        expect(missing(module)).toThrow(/the project's own `\.py` files do \(src\/a\.py:12\)$/);
+    }
+});

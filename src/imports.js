@@ -549,7 +549,8 @@ function refuseMissingModules(host, importedAt, resolves, source, lineOffset) {
         if (found === 'file') continue;
 
         const [first] = module.split('.');
-        const instead = host.instead[module];
+        // The host's own names: `constructor` is on the prototype of its table.
+        const instead = Object.hasOwn(host.instead, module) ? host.instead[module] : undefined;
 
         // A module resolves by its file name alone, beside the component or on
         // the host's search path (`host.pathOption`): a directory is not a

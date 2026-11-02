@@ -93,7 +93,7 @@ function compilePython(host, text, { name, source, named = null, lineOffset = 0,
 function translation(host, root, names, options) {
     const $B = engine();
     const shadowing = [...new Set(names.map(pythonName))].filter(
-        (n) => n in $B.builtins && /^[A-Za-z_]\w*$/.test(n) && !['None', 'True', 'False', '__debug__'].includes(n)
+        (n) => Object.hasOwn($B.builtins, n) && /^[A-Za-z_]\w*$/.test(n) && !['None', 'True', 'False', '__debug__'].includes(n)
     );
     const text = host.translate === undefined ? options.src : host.translate(options.src, root._ast, names);
 

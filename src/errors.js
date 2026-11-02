@@ -109,7 +109,11 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
 
     try {
         const name = $B.$getattr($B.get_class(error), '__name__');
-        described = `${name}: ${$B.builtins.str.$factory(error)}`;
+        // A SyntaxError's `str()` adds its file and line, which the refusal
+        // says itself, moved to the file's: its message alone.
+        const said = $B.$isinstance(error, $B.builtins.SyntaxError) ? $B.$getattr(error, 'msg') : error;
+
+        described = `${name}: ${$B.builtins.str.$factory(said)}`;
     } catch {
         /* not a Brython exception: keep the generic label */
     }
