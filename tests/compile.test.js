@@ -88,6 +88,19 @@ test("an error in a template's function is refused at the markup, the expression
     expect(error.start).toEqual({ line: 7, column: 4 });
 });
 
+// **A table of names is asked for its own**: a method called `toString` or
+// `hasOwnProperty`, a JavaScript object's, was taken for one that imports a
+// module, the one `Object.prototype` held under that name, and refused; and
+// `help("toString")` was no name pydoc must look up, where every other unknown
+// one is.
+test('a method spelled like a property of Object.prototype is no library call', () => {
+    for (const call of ['document.toString()', 'window.hasOwnProperty("name")', 'window.constructor()']) {
+        expect(() => bryc.compile(host, `from browser import document, window\nx = ${call}\n`, options)).not.toThrow();
+    }
+    expect(refusal('help("toString")\n').message).toMatch(/`help\("toString"\)` looks the name up with `pydoc`/);
+    expect(refusal('help("constructor")\n').message).toMatch(/`help\("constructor"\)` looks the name up with `pydoc`/);
+});
+
 test('a source that compiles is Brython\'s translation of it', () => {
     expect(bryc.compile(host, 'total = 1 + 2\n', options).js).toContain('$B.set_lineno(frame, 1)');
 });

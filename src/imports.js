@@ -797,15 +797,19 @@ function refuseLibraryCalls(host, ast, table, source, lineOffset) {
         const { func } = node;
         const [first] = node.args;
         const name = first instanceof $B.ast.Constant && typeof first.value === 'string' ? first.value : null;
+        // Each table asked for its own names: `toString` and `constructor` are
+        // on their prototype, and a JavaScript object's methods besides.
         const module =
-            func instanceof $B.ast.Attribute && !defined.has(func.attr) ? IMPORTED_BY_METHOD[func.attr] : undefined;
+            func instanceof $B.ast.Attribute && !defined.has(func.attr) && Object.hasOwn(IMPORTED_BY_METHOD, func.attr)
+                ? IMPORTED_BY_METHOD[func.attr]
+                : undefined;
         const documented =
             func instanceof $B.ast.Name &&
             func.id === 'help' &&
             builtin('help', scope) &&
             name !== null &&
-            $B.stdlib[name.split('.')[0]] === undefined &&
-            $B.builtins[name] === undefined;
+            !Object.hasOwn($B.stdlib, name.split('.')[0]) &&
+            !Object.hasOwn($B.builtins, name);
 
         if (module === undefined && !documented) return;
 
