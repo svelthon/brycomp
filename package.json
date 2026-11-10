@@ -14,9 +14,9 @@
     "compiler"
   ],
   "type": "module",
-  "main": "./src/bryc.js",
+  "main": "./src/brycomp.js",
   "exports": {
-    ".": "./src/bryc.js",
+    ".": "./src/brycomp.js",
     "./package.json": "./package.json"
   },
   "files": [

@@ -3,14 +3,14 @@
 // **Brycomp holds nothing of the framework it serves**: its files reach one
 // another and Bryvend, nothing else, Bryntime included; its code names neither
 // a framework nor a rune nor a bridge; and what it says of itself names no
-// tool built on it. Its tests reach it by its door, `src/bryc.js`, the one
+// tool built on it. Its tests reach it by its door, `src/brycomp.js`, the one
 // module its package exports.
 import { test, expect, describe } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const SRC = 'src';
-const DOOR = `${SRC}/bryc.js`;
+const DOOR = `${SRC}/brycomp.js`;
 const files = (dir) => readdirSync(dir).filter((file) => file.endsWith('.js')).map((file) => join(dir, file));
 
 const lines = (file) =>

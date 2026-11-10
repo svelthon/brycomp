@@ -72,7 +72,7 @@ optionally, how its own syntax becomes Python before the translation
 (`translate`). For a component, it hands over the functions its template
 compiled to (`defs`), which Brycomp joins after the script, each where its
 markup stands; a host whose template reads a key with a dot writes them with
-`templateDots` first. Every member is described in `src/bryc.js`, Brycomp's
+`templateDots` first. Every member is described in `src/brycomp.js`, Brycomp's
 one door.
 
 ## Demo

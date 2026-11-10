@@ -2,7 +2,7 @@
 // in the page, for a host written here, and what `compile()` hands back is
 // shown on the right. Served as it is, from the repository's root
 // (`python3 -m http.server`), at /demo/.
-import { compile } from 'bryc';
+import { compile } from 'brycomp';
 
 // What only a framework knows, the least `compile()` asks: the name refusals
 // are said under, the module the generated code imports its runtime from, and

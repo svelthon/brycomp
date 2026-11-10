@@ -6,7 +6,7 @@
 // script with the template's functions after it. And how a name of the module
 // is held, which the host writes with Brycomp's accessors.
 import { test, expect } from 'vitest';
-import * as bryc from '../src/bryc.js';
+import * as bryc from '../src/brycomp.js';
 
 // A host that makes a state as Vue does, a ref its `triggerRef` moves.
 const host = {
