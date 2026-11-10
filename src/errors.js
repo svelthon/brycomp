@@ -124,10 +124,14 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
         const line = $B.$getattr(error, 'lineno');
         if (typeof line === 'number') {
             const range = ranges.find(([from, to]) => line >= from && line <= to);
-            at = range === undefined ? line + lineOffset : range[2];
+            // A template function's expression starts on the line after its
+            // `def` and runs over the lines of markup it was written on.
+            const down = range === undefined ? 0 : Math.max(0, line - range[0] - 1);
+            at = range === undefined ? line + lineOffset : range[2] + down;
             // The column of the expression itself when it is one of the
-            // template's, in the `file:line:column` its refusals use.
-            column = range === undefined ? undefined : range[3];
+            // template's, in the `file:line:column` its refusals use, on the
+            // line it starts on.
+            column = range === undefined || down > 0 ? undefined : range[3];
             where = column === undefined ? `${source}:${at}` : `${source}:${at}:${column + 1}`;
 
             if (range !== undefined) {
