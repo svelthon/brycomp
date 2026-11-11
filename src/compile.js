@@ -96,7 +96,7 @@ export function compile(
         js,
         namespace,
         module,
-        map: sourceMap(module, source, sourceContent ?? src, lineOffset),
+        map: sourceMap(module, source, sourceContent ?? src, lineOffset, ranges),
         jsImports,
         jsImported,
         imported: [...importedAt.keys()],

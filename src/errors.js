@@ -79,11 +79,20 @@ const habitsIn = (text) => {
     return HABITS.filter(([pattern]) => pattern.test(code)).map(([, said]) => said);
 };
 
-// `lineOffset` is the count of lines before the script, and `ranges` the Python
-// lines each template function occupies with the markup line it stands for: the
-// table the runtime reads for an error raised later, read here for one raised
-// at compile time. A syntax error in `{ok ? "yes" : "no"}` names the line of
-// markup it is written on, quotes it, and says what Python writes instead.
+// A Python line as the line of the file it is written on. `lineOffset` is the
+// count of lines before the script, and `ranges` the Python lines each template
+// function occupies with the markup line it stands for: a template function's
+// expression starts on the line after its `def` and runs over the lines of
+// markup it was written on. The table the runtime reads for an error raised
+// later, read here for one raised at compile time and for the source map.
+function fileLine(line, lineOffset, ranges = []) {
+    const range = ranges.find(([from, to]) => line >= from && line <= to);
+
+    return range === undefined ? line + lineOffset : range[2] + Math.max(0, line - range[0] - 1);
+}
+
+// A syntax error in `{ok ? "yes" : "no"}` names the line of markup it is
+// written on, quotes it, and says what Python writes instead.
 function pythonError(host, error, source, lineOffset, block = '', ranges = [], src = '') {
     const $B = globalThis.__BRYTHON__;
 
@@ -124,10 +133,8 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
         const line = $B.$getattr(error, 'lineno');
         if (typeof line === 'number') {
             const range = ranges.find(([from, to]) => line >= from && line <= to);
-            // A template function's expression starts on the line after its
-            // `def` and runs over the lines of markup it was written on.
             const down = range === undefined ? 0 : Math.max(0, line - range[0] - 1);
-            at = range === undefined ? line + lineOffset : range[2] + down;
+            at = fileLine(line, lineOffset, ranges);
             // The column of the expression itself when it is one of the
             // template's, in the `file:line:column` its refusals use, on the
             // line it starts on.
@@ -170,4 +177,4 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
     );
 }
 
-export { refuse, pythonError };
+export { refuse, pythonError, fileLine };

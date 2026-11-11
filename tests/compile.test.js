@@ -184,6 +184,24 @@ test("a class's lines map to its line, which Brython marks with the kind of stat
     expect([original[at], original[at + 1]]).toEqual([0, 0]);
 });
 
+// A template's function follows the script in the Python compiled, and its
+// lines map to the markup its expression is written on, as an error raised in
+// it is placed: moved by the script's offset alone, an expression of line 13
+// was sent to line 14.
+test("a template function's lines map to the markup line of its expression", () => {
+    const { module, map } = bryc.compile(host, 'x = 1\n', {
+        ...options,
+        component: true,
+        lineOffset: 1,
+        defs: ['def __expr_0():\n    return ("MARKED")'],
+        defLines: [12],
+        defColumns: [4]
+    });
+    const at = module.split('\n').findIndex((one) => one.includes('MARKED'));
+
+    expect(originalLines(map.mappings)[at]).toBe(11);
+});
+
 // **The code Brython generated lives in a module of its own**, which imports
 // its runtime from the host's bridge, under the names the host's runtime gives
 // it, and runs the Python body inside the namespace it is handed: a Python

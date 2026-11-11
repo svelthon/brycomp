@@ -3,7 +3,7 @@
 // the source map, how a name of the module is held, and what a name of the
 // generated module may be.
 import { pythonName } from './expressions.js';
-import { pythonError, refuse } from './errors.js';
+import { fileLine, pythonError, refuse } from './errors.js';
 
 // The engine Brycomp compiles on, Bryvend's, started, with the parsing chain it
 // ships beside it, Brython's parser, its symbol table and its code generator:
@@ -223,7 +223,9 @@ function vlq(value) {
     return encoded;
 }
 
-function sourceMap(generated, source, content, lineOffset) {
+// Each Python line is mapped to the line of the file it is written on
+// (`fileLine`): a template function's, which follows the script, to its markup.
+function sourceMap(generated, source, content, lineOffset, ranges = []) {
     // The line, and for a `class` the kind of statement after it, `'ClassDef'`.
     const marker = /\$B\.set_lineno\(frame, (\d+)[,)]/;
     const segments = [];
@@ -232,7 +234,7 @@ function sourceMap(generated, source, content, lineOffset) {
 
     for (const line of generated.split('\n')) {
         const found = line.match(marker);
-        if (found) current = Number(found[1]) - 1 + lineOffset;
+        if (found) current = fileLine(Number(found[1]), lineOffset, ranges) - 1;
 
         if (current === null) {
             segments.push('');

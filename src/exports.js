@@ -295,20 +295,35 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
             );
         }
 
-        // A list or a tuple is the export list, and an entry that is not a
-        // string is left out, as a bad entry always was. Anything else, a
-        // string or `None`, or no `__all__` at all once `del` has run, is no
-        // export list, and the module exports its functions.
+        // A list or a tuple is the export list. Anything else, a string or
+        // `None`, or no `__all__` at all once `del` has run, is no export
+        // list, and the module exports its functions.
         const value = namespace.__all__;
+
+        line = run.at(-1).lineno + lineOffset;
 
         // A name holding a character past U+FFFF, `𠀀`, is a `String` object
         // here, the storage `pyScalar` reads in the runtime.
         if (value !== undefined && ($B.is_list(value) || $B.is_tuple(value))) {
-            names = [...value]
-                .map((one) => (one instanceof String ? one.valueOf() : one))
-                .filter((one) => typeof one === 'string');
+            names = [...value].map((one) => (one instanceof String ? one.valueOf() : one));
+
+            // An entry that is no string names nothing: left out, it exported
+            // nothing and said nothing, where CPython's `from m import *`
+            // raises `TypeError: Item in __all__ must be str`.
+            const stray = names.find((one) => typeof one !== 'string');
+
+            if (stray !== undefined) {
+                const kind = $B.class_name(stray);
+
+                throw refuse(
+                    `${host.name} — \`__all__\` lists \`${$B.builtins.repr(stray)}\`, ${/^[aeiou]/i.test(kind) ? 'an' : 'a'} ` +
+                        `\`${kind}\`, and an entry of \`__all__\` is a name, a string, ` +
+                        `as Python's \`from m import *\` requires (${source}:${line})`,
+                    source,
+                    line
+                );
+            }
         }
-        line = run.at(-1).lineno + lineOffset;
     }
 
     // Every other write that reaches the module's `__all__`: under a condition,

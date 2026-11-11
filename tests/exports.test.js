@@ -17,7 +17,7 @@ const next = bryc.NEXT_VALUE;
 // statements have run**, as `from m import *` obeys it: each statement that
 // writes it is run as Python runs it when it is written with literals,
 // `__all__` and the builtins that only read, the last one counts, an entry
-// that is not a string is left out, a name listed twice is exported once. A
+// that is not a string is refused, a name listed twice is exported once. A
 // write a static reading cannot follow is refused, under the host's name, on
 // its line. No `__all__`, no list.
 const source = 'src/probe.py';
@@ -33,13 +33,21 @@ test('the list the module ends with, run as Python runs it', () => {
         'def load(): pass',
         'def save(): pass',
         '__all__ = ["gone"]',
-        '__all__ = ["load", "save", 3]',
+        '__all__ = ["load", "save"]',
         '__all__ += sorted(["load"])'
     ].join('\n');
 
-    // The last list, its number left out and its `load` exported once, at the
-    // line of the statement that last set it.
+    // The last list, its `load` exported once, at the line of the statement
+    // that last set it.
     expect(exported(src, 4)).toEqual({ names: ['load', 'save'], line: 9 });
+});
+
+// Left out, it exported nothing and said nothing, where CPython's `from m
+// import *` raises `TypeError: Item in __all__ must be str`.
+test('an entry that is not a string is refused on the line that set the list', () => {
+    expect(() => exported('def load(): pass\n__all__ = ["load", 3]\n', 4)).toThrow(
+        'host — `__all__` lists `3`, an `int`, and an entry of `__all__` is a name, a string, as Python\'s `from m import *` requires (src/probe.py:6)'
+    );
 });
 
 test('a string is a list of its characters, as `+=` makes it', () => {
