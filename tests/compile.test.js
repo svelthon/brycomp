@@ -365,6 +365,22 @@ test('a script with no template functions is the script, dedented', () => {
     expect({ src, ranges, templateLine }).toEqual({ src: 'x = 1', ranges: [], templateLine: undefined });
 });
 
+// **What the host binds for a template's functions to call is read as a name
+// the module binds** (`host.adapters`), off the namespace: a name nothing in
+// the module binds was searched for at each call, through the function's own
+// locals first.
+test("a template's function reads the host's adapter off the namespace", () => {
+    const defs = ['def __expr_0(row):\n    return __text(row["name"])'];
+    const read = (more) => bryc.compile({ ...host, ...more }, 'x = 1', { name: 'Probe', source: 'src/Probe.svelte', component: true, defs }).js;
+    const namespace = 'locals_src_Probe_svelte';
+
+    expect(read()).toContain(`$B.resolve_in_scopes('__text', [${namespace}___expr_0,${namespace},_b_]`);
+    expect(read({ adapters: ['__text'] })).toContain(`(${namespace}.__text ?? $B.resolve_in_scopes('__text', [${namespace}, _b_]))`);
+    expect(read({ adapters: ['__text'] })).not.toContain(`${namespace}___expr_0,${namespace},_b_`);
+    // And no compile after it reads one so.
+    expect(read()).toContain(`$B.resolve_in_scopes('__text', [${namespace}___expr_0,${namespace},_b_]`);
+});
+
 // **A host whose template's dot reads a key rewrites its functions with
 // `templateDots`** before it hands them over: each attribute read becomes a
 // call to its `readAttr`, each write a binding makes a call to its

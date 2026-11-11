@@ -74,6 +74,10 @@
 //            store once `effect` is bound: `['state', 'derived', 'effect', …]`
 //            for Svelte, none for Vue. A JavaScript import of one is held
 //            under another variable, and Python reads it under its own name.
+//   adapters optional: the names the host binds in a component's namespace
+//            for the functions of its template to call, `['__text', '__key',
+//            …]`. A function reads one off the namespace, as it reads a name
+//            the module binds, and not by a search at each call.
 //
 // Whatever names a thing the host provides belongs to the host, messages
 // included.

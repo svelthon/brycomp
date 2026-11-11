@@ -61,11 +61,29 @@ function compilePython(host, text, { name, source, named = null, lineOffset = 0,
     const mapped = $B.url2name[source];
     if (named !== null) $B.url2name[source] = named;
 
+    // A name nothing in the module binds is searched for at each read, through
+    // the locals of the function reading it first, whose class the engine asks
+    // on the way. What the host binds for a template's functions to call
+    // (`host.adapters`) is in the namespace before any of them runs: counted
+    // among the module's names by the time a function is compiled, it is read
+    // off the namespace, as a name the module binds is.
+    const compiled = $B.ast.FunctionDef.prototype.to_js;
+    const adapters = host.adapters ?? [];
+
+    if (adapters.length) {
+        $B.ast.FunctionDef.prototype.to_js = function (scopes) {
+            for (const one of adapters) scopes[0].locals.add(one);
+
+            return compiled.call(this, scopes);
+        };
+    }
+
     try {
         return $B.py2js({ src: text, filename: source }, name, [name]);
     } catch (error) {
         throw pythonError(host, error, source, lineOffset, authored, ranges, src);
     } finally {
+        $B.ast.FunctionDef.prototype.to_js = compiled;
         $B.id_counter(counter);
         $B.lambda_magic = tag;
         if (mapped === undefined) delete $B.url2name[source];
