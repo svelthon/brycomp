@@ -51,6 +51,7 @@ call is absent, rather than hand a host a module with no reactivity.
 | `$B.stdlib` | Brython's catalogue of the modules it can import: `from browser import timer` imports the submodule `browser.timer` when the catalogue names one, and `help("name")` documents a name it holds no module of |
 | `$B.set_lineno(frame, N)` | emitted throughout the generated code, which therefore carries the Python line it came from: enough for a line-level source map |
 | `$B.resolve_global(name, ns)` | where a global the generated code reads is resolved, through `resolve_in_namespace`, which demands an *own* property unless the namespace says `$proxy`: the member whose disappearance would stop the whole namespace trick, and the one nobody would think to grep for |
+| `$B.unicodedb` | the text of `unicode.txt`, the names of Unicode characters a `\N{BULLET}` escape is read by, which the engine fetches beside brython.js when it is `undefined`. Under Node, which has no request to fetch it with, `unicode-names.js` puts an accessor there that reads it off Bryvend, which ships it, when an escape first asks |
 
 `py2js` derives the namespace identifier from **`filename`**, or from the name
 `$B.url2name` gives it: `module` and `locals_id` are ignored by `js_from_root`.

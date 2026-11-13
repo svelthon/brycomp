@@ -83,6 +83,7 @@
 // included.
 import 'bryvend';
 import 'bryvend/compiler';
+import './unicode-names.js';
 
 // The common half of a compile, in its order (`compile.js`).
 export { compile } from './compile.js';

@@ -48,6 +48,17 @@ test('a name that is no builtin leaves the code as Brython wrote it', () => {
     expect(js()).toContain('_b_.max');
 });
 
+// A named escape, `\N{BULLET}`, in a string and in an f-string, is the
+// character, as CPython reads it: the engine fetches the names of Unicode
+// characters by a request Node does not have, and the compile failed with
+// "XMLHttpRequest is not defined"; they are read off Bryvend instead.
+test('a named Unicode escape compiles to its character under Node', () => {
+    const code = bryc.compile(host, 'dot = "\\N{BULLET}"\nline = f"\\N{EM DASH} {dot}"\n', options).js;
+
+    expect(code).toContain('•');
+    expect(code).toContain('—');
+});
+
 // **A Python error at compile time is a refusal on the line of the file that
 // holds it**: Brython's own message, under the host's name, at the Python line
 // moved by what stands before the Python in its file, on the error object as
