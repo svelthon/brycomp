@@ -31,6 +31,11 @@ const strings = (given) => given.filter((one) => typeof one === 'string');
 // ordinary assignment and read from the AST like `__all__`, under the same two
 // rules: the value that counts is the last one assigned, and what a static read
 // cannot follow is refused rather than skipped.
+// The text of a string constant, which the engine's parser keeps escaped for
+// JavaScript's single quotes: `\'` for `'`, `\\` for `\`, `\n` for a newline.
+const ESCAPED = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v' };
+const constantText = (held) => held.replace(/\\([\s\S])/g, (all, one) => ESCAPED[one] ?? one);
+
 function declaredJsImports(host, ast, table, source, at = (line) => line) {
     const $B = globalThis.__BRYTHON__;
     const body = ast.body;
@@ -87,7 +92,7 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
                 if (why !== null) refuseAt(node, `names \`${one}\`, ${why}`);
             }
 
-            lists.set(key.value, strings(names));
+            lists.set(constantText(key.value), strings(names));
         });
         modules = [...lists].map(([from, names]) => ({ from, names }));
     }
@@ -116,8 +121,9 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
 // The clause is JavaScript's own, since the keyword has already announced that
 // much. There is nothing new to learn, and no ambiguity to invent between a
 // default import and a named one.
-const IMPORTJS = /^importjs\b/;
-const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
+// The word ends where a Python name would: `importjsé` is a name of its own.
+const IMPORTJS = /^importjs(?!\p{XID_Continue})/u;
+const IMPORTJS_ANYWHERE = /^[ \t]+importjs(?!\p{XID_Continue})/u;
 // The module's string as JavaScript writes one: anything but its own quote, so
 // `"./O'Brien.svelte"` is a path. An escape is not read, and is refused. A
 // Python comment may follow it, as it may follow any line; a `#` inside the

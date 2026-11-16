@@ -437,6 +437,10 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
         'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
     );
+    // A comment after a parenthesised target is left out of what closes it.
+    expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
+        'def __expr_set_0(value, row):\n    writeAttr((row), "label",\n\n value)'
+    );
 });
 
 // A comprehension's target reads what it assigns into, `row` in

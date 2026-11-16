@@ -179,7 +179,7 @@ function templateDots(host, def) {
         if (node instanceof $B.ast.Assign && node.targets.length === 1 && target instanceof $B.ast.Attribute) {
             // The target may stand between parentheses, `(row.label) = new`:
             // the call opens before them and they close around the object.
-            const closers = def.slice(end(target), begin(node.value)).replace(/[\s=]/g, '');
+            const closers = def.slice(end(target), begin(node.value)).replace(/#.*/g, '').replace(/[\s=]/g, '');
             insert(begin(node), `${writeAttr}(`, node);
             replace(dot(target), begin(node.value), `${closers}, ${JSON.stringify(target.attr)},${breaks(dot(target), begin(node.value))} `);
             insert(end(node.value), ')', node.value);

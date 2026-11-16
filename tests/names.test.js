@@ -60,6 +60,22 @@ test('a module named twice in `__js__` imports the last list alone', () => {
     ]);
 });
 
+// The module's path is the string Python reads, which the engine's tree holds
+// escaped for JavaScript.
+test('a path of `__js__` is the string Python reads, a quote and a backslash in it', () => {
+    const { jsImports } = bryc.compile(host, String.raw`__js__ = {"./O'Brien.js": ["a"], "./back\\slash.js": ["b"]}` + '\n', { name: 'a', source });
+
+    expect(jsImports.map((one) => one.from)).toEqual(["./O'Brien.js", './back\\slash.js']);
+});
+
+// A name that starts with the keyword is a name, in a module and a component.
+test('`importjsé` is a name, not the keyword', () => {
+    const src = 'importjsé = 7\nobserved = importjsé\n';
+
+    expect(() => bryc.compile(host, src, { name: 'a', source })).not.toThrow();
+    expect(() => bryc.compile(host, src, { name: 'a', source, component: true })).not.toThrow();
+});
+
 // A walrus in a lambda binds the lambda's own name, its comprehension's too,
 // which no value of the template's stands for.
 test("a walrus in a lambda reads no name of the template's", () => {
