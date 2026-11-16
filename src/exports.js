@@ -17,13 +17,23 @@
 // `from m import *`, is left out while the good ones are kept.
 import { refuse } from './errors.js';
 import { jsLocal } from './imports.js';
-import { walkScoped, builtinIn, scopeIn, isGlobalScope, moduleBinds, READS_ONLY, keepsValue } from './scopes.js';
+import {
+    walkScoped,
+    builtinIn,
+    scopeIn,
+    isGlobalScope,
+    moduleBinds,
+    READS_ONLY,
+    READS_LIST,
+    ITEMS_OUT,
+    keepsValue,
+    handsOnItems,
+    subscripts,
+    methodOn
+} from './scopes.js';
 import { counterStart, engine, JS_RESERVED, PY_NAME, NS, NEXT_VALUE } from './translation.js';
 
 const isAll = (node) => node instanceof globalThis.__BRYTHON__.ast.Name && node.id === '__all__';
-
-// Methods of a list that read it and change nothing.
-const READS_LIST = new Set(['copy', 'count', 'index', '__len__', '__contains__', '__iter__', '__getitem__']);
 
 // Whether a target writes `__all__`: the name, an item or a slice of it, or
 // either inside a tuple or a starred target.
@@ -62,8 +72,11 @@ const writesAll = (node) => {
 };
 
 // Every place the source writes `__all__`, and every read that hands the list
-// on, `escapes`, where what is done to it next is out of sight.
-function allWrites(ast, builtin = () => false) {
+// on, `escapes`, where what is done to it next is out of sight. A list of
+// strings alone hands on its items and a copy of them as they are, `deep`
+// subscripts in (`handsOnItems`): one, unless a statement made it hold
+// anything else.
+function allWrites(ast, builtin = () => false, deep = Infinity) {
     const $B = globalThis.__BRYTHON__;
     const found = [];
 
@@ -74,9 +87,12 @@ function allWrites(ast, builtin = () => false) {
 
     walkScoped(ast.body, (node, scope, line, parent, grand) => {
         if (writesAll(node)) found.push({ node, scope, line });
+        // A method that hands the items on, `copy`, as a slice does.
+        const itemsOut = ITEMS_OUT.has(methodOn(parent, grand)) && subscripts(node) + 1 < deep;
+
         if (
             ((isAll(node) && node.ctx instanceof $B.ast.Load) || item(node)) &&
-            !keepsValue(parent, grand, node, (name) => builtin(name, scope))
+            (itemsOut || (!keepsValue(parent, grand, node, (name) => builtin(name, scope)) && !handsOnItems(parent, node, deep, deep - 1)))
         ) {
             found.push({ node, scope, line, escapes: true });
         }
@@ -180,6 +196,10 @@ function runStatements(src, statements) {
     const namespace = {};
     const original = $B.namespace;
     const counter = $B.id_counter(counterStart(name));
+    const text = (one) => typeof one === 'string' || one instanceof String;
+    // Whether `__all__` held strings alone after each statement: none, a
+    // string, or a list or a tuple of them.
+    let strings = true;
 
     $B.namespace = (requested) => (requested === name ? namespace : original(requested));
     try {
@@ -194,13 +214,21 @@ function runStatements(src, statements) {
 
                 return { namespace, statement, raised };
             }
+
+            const value = namespace.__all__;
+
+            strings &&=
+                value === undefined ||
+                value === $B.builtins.None ||
+                text(value) ||
+                (($B.is_list(value) || $B.is_tuple(value)) && [...value].every(text));
         }
     } finally {
         $B.namespace = original;
         $B.id_counter(counter);
     }
 
-    return { namespace };
+    return { namespace, strings };
 }
 
 // What comes back is the list and the line of the statement that last set it,
@@ -260,8 +288,13 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
         run.push(node);
     }
 
+    // How deep in `__all__` a read hands on nothing that can change.
+    let deep = Infinity;
+
     if (run.length) {
-        const { namespace, statement, raised } = runStatements(src, run);
+        const { namespace, statement, raised, strings } = runStatements(src, run);
+
+        if (strings) deep = 1;
 
         // Python raises there, at import: the module never runs past it.
         if (raised !== undefined) {
@@ -309,7 +342,7 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
     // or rebound by a loop, an import or a walrus.
-    for (const { node, scope, line: at, escapes } of allWrites(ast, builtin)) {
+    for (const { node, scope, line: at, escapes } of allWrites(ast, builtin, deep)) {
         if (handled.has(node)) continue;
 
         const block = scope === null ? null : table.blockOf(scope);

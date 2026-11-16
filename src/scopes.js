@@ -167,6 +167,45 @@ const keepsValue = (parent, grand, node, builtin, methods = true) => {
     );
 };
 
+// The methods of a list that only read it: their answer is a number, a truth,
+// or its items, in a copy or one by one (`ITEMS_OUT`).
+const READS_LIST = new Set(['copy', 'count', 'index', '__len__', '__contains__', '__iter__', '__getitem__']);
+const ITEMS_OUT = new Set(['copy', '__iter__', '__getitem__']);
+
+// How many subscripts in a read stands: `__js__` none, `__js__["m"][0]` two.
+const subscripts = (node) => {
+    let depth = 0;
+
+    for (let one = node; one instanceof globalThis.__BRYTHON__.ast.Subscript; one = one.value) depth++;
+
+    return depth;
+};
+
+// The method a read is called a method of, `__js__["m"].copy()`, or null.
+const methodOn = (parent, grand) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent ? parent.attr : null;
+};
+
+// Whether a read of such a value hands on only strings, or a copy of them, which
+// nothing of it changes through: an item or a slice `deep` subscripts in or
+// deeper, `__js__["m"][0]` or `__js__["m"][:]`, or an unpacking `unpacked`
+// subscripts in or deeper, which takes what iterating it gives, the keys of
+// `__js__` and the strings of `__js__["m"]`, `first, *rest = __js__["m"]`.
+const handsOnItems = (parent, node, deep, unpacked) => {
+    const $B = globalThis.__BRYTHON__;
+    const depth = subscripts(node);
+
+    return (
+        depth >= deep ||
+        (depth >= unpacked &&
+            parent instanceof $B.ast.Assign &&
+            parent.value === node &&
+            parent.targets.every((target) => target instanceof $B.ast.Tuple || target instanceof $B.ast.List))
+    );
+};
+
 // The names a node binds where it stands: a name stored or deleted, a `def`, a
 // `class`, an import alias, an `except … as` and a `match` capture. What the
 // symbol table counts as a binding, read back off the tree to say where.
@@ -218,5 +257,10 @@ export {
     bindsHere,
     READS_ONLY,
     keepsValue,
+    handsOnItems,
+    READS_LIST,
+    ITEMS_OUT,
+    subscripts,
+    methodOn,
     globalReads
 };

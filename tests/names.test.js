@@ -100,6 +100,30 @@ test('`__js__` handed to a JavaScript import spelled like a builtin is refused, 
     );
 });
 
+// Its lists hold strings alone: one of them, a copy of a list, the items an
+// unpacking takes, handed on, change nothing of it.
+test('a string of `__js__`, a copy of a list of it, and an unpacking of one are handed on', () => {
+    for (const read of ['x = __js__["./a.js"][0]', 'x = __js__["./a.js"][:]', 'first, = __js__["./a.js"]', 'first, *rest = __js__["./a.js"]', 'key, = __js__']) {
+        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
+    }
+    expect(() => bryc.compile(host, '__js__ = {"./a.js": ["kept"]}\nx, = [__js__["./a.js"]]\n', { name: 'a', source })).toThrow(
+        /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
+    );
+});
+
+// A method that only reads hands on strings at most: a copy of a list, its
+// count, the keys of the dict. One that hands a list on does not.
+test('a method of `__js__` that only reads is a read, one that hands a list on is refused', () => {
+    for (const read of ['x = __js__["./a.js"].copy()', 'n = __js__["./a.js"].index("kept")', 'keys = __js__.keys()', 'n = __js__.__len__()']) {
+        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
+    }
+    for (const handed of ['x = __js__.get("./a.js")', 'x = __js__.values()', 'x = __js__.copy()', 'x = __js__.__getitem__("./a.js")']) {
+        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${handed}\n`, { name: 'a', source })).toThrow(
+            /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
+        );
+    }
+});
+
 test("`__js__` assigned at the top of the module is read, the last one counting, and a function's own is its own", () => {
     const src = '__js__ = {"./a.js": ["gone"]}\n__js__ = {"./a.js": ["kept"]}\nn = len(__js__["./a.js"])\n\ndef f():\n    __js__ = 1\n    return __js__\n';
 

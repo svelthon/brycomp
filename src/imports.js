@@ -6,7 +6,24 @@
 // line.
 import { atomic, pythonName } from './expressions.js';
 import { refuse } from './errors.js';
-import { BODIES, walkScoped, builtinIn, scopeIn, isGlobalScope, blockBinds, moduleBinds, bindsHere, keepsValue } from './scopes.js';
+import {
+    BODIES,
+    walkScoped,
+    builtinIn,
+    scopeIn,
+    isGlobalScope,
+    blockBinds,
+    moduleBinds,
+    bindsHere,
+    keepsValue,
+    handsOnItems,
+    READS_LIST,
+    subscripts,
+    methodOn
+} from './scopes.js';
+
+// The methods of the dict that only read it, which hand on its keys at most.
+const READS_KEYS = new Set(['keys', '__len__', '__contains__', '__iter__']);
 import { JS_NAME, unbindable, PROTO } from './translation.js';
 
 // `__js__` keeps a literal reading, where `__all__` is run as Python runs it
@@ -54,8 +71,10 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
     // loop, a destructuring, a second target, an import, a `def`, a function
     // that declares it `global`, or a read that hands the dict or a list of it
     // on, by the rule `__all__`'s reads follow (`keepsValue`), no method
-    // counting as a read. A parameter or a local of that name is the
-    // function's own, as with `__all__`.
+    // counting as a read but those that hand on strings at most. Its strings,
+    // two subscripts in or unpacked, are handed on as they are, and so is a
+    // copy of a list (`handsOnItems`). A parameter or a local of that name is
+    // the function's own, as with `__all__`.
     const isJs = (node) => node instanceof $B.ast.Name && node.id === '__js__';
     const item = (node) =>
         node instanceof $B.ast.Subscript && node.ctx instanceof $B.ast.Load && (isJs(node.value) || item(node.value));
@@ -104,9 +123,17 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
         if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__js__'))) return;
 
         const read = (isJs(node) && node.ctx instanceof $B.ast.Load) || item(node);
-        if (read && keepsValue(parent, grand, node, (name) => builtin(name, scope), false)) return;
+        // A method that only reads, of the dict, `__js__.keys()`, or of a list
+        // of it, `__js__["m"].copy()`, hands on strings at most.
+        const method = methodOn(parent, grand);
+        const reads = [READS_KEYS, READS_LIST][subscripts(node)]?.has(method) === true;
 
-        refuseAt(node, 'is set by assigning it a dict at the top of the module, and read or changed by nothing else');
+        if (read && (reads || keepsValue(parent, grand, node, (name) => builtin(name, scope), false) || handsOnItems(parent, node, 2, 0))) return;
+
+        refuseAt(
+            node,
+            'is set by assigning it a dict at the top of the module, and nothing else changes it or hands it or a list of it on; `list(__js__["m"])` is a copy'
+        );
     });
 
     return modules.filter((one) => one.names.length);

@@ -87,6 +87,20 @@ test('a list read off the list is handed on as the list is', () => {
     expect(exported('def a(): pass\n__all__ = ["a"]\nprint(__all__[0])\n').names).toEqual(['a']);
 });
 
+// A list that only ever held strings hands on its items, and a copy of them,
+// as they are; one a statement made hold a list does not.
+test('an item, a slice or an unpacking of a list of strings is no hand-off', () => {
+    for (const read of ['x = __all__[0]', 'x = __all__[:]', 'first, = __all__', 'first, *rest = __all__', 'x = __all__.copy()']) {
+        expect(exported(`def a(): pass\n__all__ = ["a"]\n${read}\n`).names).toEqual(['a']);
+    }
+    for (const read of ['x = __all__[:]', 'first, = __all__', 'x = __all__.copy()', 'x = __all__.__getitem__(0)']) {
+        expect(() => exported(`def a(): pass\ndef b(): pass\n__all__ = [["a"]]\n${read}\nx[0].append("b")\n__all__ = __all__[0]\n`)).toThrow(
+            /^host — `__all__` is handed on where this file cannot follow what is done to it/
+        );
+    }
+    expect(() => exported('def a(): pass\n__all__ = ["a"]\nx = __all__\n')).toThrow(/is handed on where/);
+});
+
 // A JavaScript import spelled like a builtin that only reads is the import, not
 // the builtin: the list it makes is not known before the module runs.
 test('a list made by a JavaScript import spelled like a builtin is refused, as one made by any name', () => {
