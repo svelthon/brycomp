@@ -18,6 +18,7 @@ import {
     refuseLibraryCalls
 } from './imports.js';
 import { fileLine } from './errors.js';
+import { pythonName } from './expressions.js';
 
 // `text` is the script as its author wrote it, and for a component `defs`,
 // `defLines` and `defColumns` the functions its template compiled to, with
@@ -79,8 +80,11 @@ export function compile(
     const jsImported = jsImports.flatMap((one) => one.entries.map((entry) => entry.local));
 
     // The names JavaScript gives the module, its imports and those beside it,
-    // read as the module reads its own.
+    // read as the module reads its own, and no builtin to any analysis that
+    // asks the table (`builtinIn`): a refusal's, the export list's.
     const js = translation(host, root, [...jsImported, ...jsNames], translating);
+
+    table.external = new Set([...jsImported, ...jsNames].map(pythonName));
     const namespace = moduleNamespace(host, js, source, named);
 
     const { found: importedAt, relative } = moduleImports(root._ast);
@@ -89,7 +93,7 @@ export function compile(
     if (resolves) refuseMissingModules(host, importedAt, resolves, source, at);
     refuseTypeParameters(host, root._ast.body, source, at);
     refuseBoundImports(host, root._ast, table, jsImported, source, at);
-    refuseLibraryCalls(host, root._ast, table, source, at, [...jsImported, ...jsNames]);
+    refuseLibraryCalls(host, root._ast, table, source, at);
 
     const module = moduleCode(host, { js, namespace, source });
 

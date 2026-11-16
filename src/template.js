@@ -3,6 +3,8 @@
 // (`EXPR_PREFIX`), and a tool for a host whose template reads a key with a dot
 // as well as an attribute (`templateDots`).
 import { engine } from './translation.js';
+import { bindsHere } from './scopes.js';
+import { refuse } from './errors.js';
 
 // The hidden functions the template's pass appends, one per expression it
 // compiled. The pass names them so, and Brycomp reads them by it; the two have to
@@ -220,6 +222,36 @@ function templateDots(host, def) {
     };
 
     visit(tree);
+
+    // The helpers are called by name where the rewrite calls them, and a name
+    // the function binds of that spelling takes the call: a parameter, a
+    // lambda's or a comprehension's, a walrus, a `def`, an import. Refused,
+    // as the host's helper cannot be reached from there.
+    if (edits.length) {
+        const helpers = new Set([readAttr, writeAttr]);
+        const walked = new Set();
+        const binder = (node) => {
+            if (!node || typeof node !== 'object' || walked.has(node)) return undefined;
+            walked.add(node);
+
+            const found = (node instanceof $B.ast.arg ? [node.arg] : bindsHere(node)).find((one) => helpers.has(one));
+            if (found !== undefined) return found;
+
+            for (const key of Object.keys(node)) {
+                const deeper = key === 'parent' || key === '$parent' ? undefined : binder(node[key]);
+                if (deeper !== undefined) return deeper;
+            }
+            return undefined;
+        };
+        const taken = binder(tree);
+
+        if (taken !== undefined) {
+            throw refuse(
+                `${host.name} — \`${taken}\` is the helper a template expression calls to read or write an ` +
+                    `attribute, and a name the expression binds of that spelling takes the call: choose another`
+            );
+        }
+    }
 
     edits.sort((one, other) => other.from - one.from || one.size - other.size);
 

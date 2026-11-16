@@ -449,6 +449,21 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
         'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
     );
+    // A name the function binds of a helper's spelling would take its call:
+    // a parameter, a lambda's, a comprehension's, a walrus.
+    const reading = named('readAttr', 'writeAttr');
+
+    for (const body of [
+        '(lambda readAttr: row.name)(0)',
+        '[row.name for readAttr in [0]]',
+        '[(readAttr := 0), row.name]',
+        '(lambda writeAttr: row.name)(0)'
+    ]) {
+        expect(() => bryc.templateDots(reading, `def __expr_0(row):\n    return ${body}`)).toThrow(/is the helper a template expression calls/);
+    }
+    expect(bryc.templateDots(reading, 'def __expr_0(row):\n    return (lambda other: row.name)(0)')).toBe(
+        'def __expr_0(row):\n    return (lambda other: readAttr(row, "name"))(0)'
+    );
     // A dot in a comment is none.
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    return (row. # see profile.name\n            name)')).toBe(
         'def __expr_0(row):\n    return (readAttr(row, "name"\n))'

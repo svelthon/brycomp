@@ -6,7 +6,7 @@
 // line.
 import { atomic, pythonName } from './expressions.js';
 import { refuse } from './errors.js';
-import { BODIES, walkScoped, builtinIn, scopeIn, isGlobalScope, blockBinds, moduleBinds } from './scopes.js';
+import { BODIES, walkScoped, builtinIn, scopeIn, isGlobalScope, blockBinds, moduleBinds, bindsHere, keepsValue } from './scopes.js';
 import { JS_NAME, unbindable, PROTO } from './translation.js';
 
 // `__js__` keeps a literal reading, where `__all__` is run as Python runs it
@@ -25,17 +25,17 @@ const NAMES = (node) => {
 const readable = (given) => given !== null && !given.includes(UNREADABLE);
 const strings = (given) => given.filter((one) => typeof one === 'string');
 
+// The text of a string constant, which the engine's parser keeps escaped for
+// JavaScript's single quotes: `\'` for `'`, `\\` for `\`, `\n` for a newline.
+const ESCAPED = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v' };
+const constantText = (held) => held.replace(/\\([\s\S])/g, (all, one) => ESCAPED[one] ?? one);
+
 // `__js__ = {"@sveltejs/kit": ["error", "redirect"]}`: the JavaScript a module
 // needs. Python has no way to import from npm, and a plain `.py` has no
 // `<script module>` to do it for them; this is its equivalent, written as an
 // ordinary assignment and read from the AST like `__all__`, under the same two
 // rules: the value that counts is the last one assigned, and what a static read
 // cannot follow is refused rather than skipped.
-// The text of a string constant, which the engine's parser keeps escaped for
-// JavaScript's single quotes: `\'` for `'`, `\\` for `\`, `\n` for a newline.
-const ESCAPED = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v' };
-const constantText = (held) => held.replace(/\\([\s\S])/g, (all, one) => ESCAPED[one] ?? one);
-
 function declaredJsImports(host, ast, table, source, at = (line) => line) {
     const $B = globalThis.__BRYTHON__;
     const body = ast.body;
@@ -47,28 +47,36 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
         throw refuse(`${host.name} — \`__js__\` ${what} (${source}:${line})`, source, line);
     };
 
-    // Any other write reaches the dict after the read: `__js__["m"] = […]`,
-    // `__js__ |= {…}`, `__js__.update(…)`, wherever the name is the module's.
-    // A parameter or a local of that name is the function's own, as with
-    // `__all__`.
+    // The directive is a dict assigned to the module's `__js__` at the top of
+    // the module, and this read is its only reader. Anywhere else the module's
+    // name stands is out of a static read's sight, and refused: a write to the
+    // dict (`__js__["m"] = […]`, `|=`, `.update(…)`), a binding in a branch, a
+    // loop, a destructuring, a second target, an import, a `def`, a function
+    // that declares it `global`, or a read that hands the dict or a list of it
+    // on, by the rule `__all__`'s reads follow (`keepsValue`), no method
+    // counting as a read. A parameter or a local of that name is the
+    // function's own, as with `__all__`.
     const isJs = (node) => node instanceof $B.ast.Name && node.id === '__js__';
-    walkScoped(body, (node, scope) => {
-        const changed =
-            ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isJs(node.target)) ||
-            (node instanceof $B.ast.Subscript && isJs(node.value) && !(node.ctx instanceof $B.ast.Load)) ||
-            (node instanceof $B.ast.Call && node.func instanceof $B.ast.Attribute && isJs(node.func.value));
+    const item = (node) =>
+        node instanceof $B.ast.Subscript && node.ctx instanceof $B.ast.Load && (isJs(node.value) || item(node.value));
+    const directive = (node) => node instanceof $B.ast.Assign && node.targets.length === 1 && isJs(node.targets[0]);
+    const written = new Set(body.filter(directive).map((node) => node.targets[0]));
+    const builtin = builtinIn(table, moduleBinds(table));
 
-        if (!changed) return;
+    walkScoped(body, (node, scope, line, parent, grand) => {
+        if (written.has(node) || !(isJs(node) || item(node) || bindsHere(node).includes('__js__'))) return;
 
         const block = scope === null ? null : table.blockOf(scope);
         if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__js__'))) return;
 
-        refuseAt(node, 'is set by assigning it, and changed by nothing else');
+        const read = (isJs(node) && node.ctx instanceof $B.ast.Load) || item(node);
+        if (read && keepsValue(parent, grand, node, (name) => builtin(name, scope), false)) return;
+
+        refuseAt(node, 'is set by assigning it a dict at the top of the module, and read or changed by nothing else');
     });
 
     for (const node of body) {
-        if (!(node instanceof $B.ast.Assign)) continue;
-        if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__js__')) continue;
+        if (!directive(node)) continue;
 
         if (!(node.value instanceof $B.ast.Dict)) {
             refuseAt(node, 'has to be written out as a dict of module names to lists of names');
@@ -389,21 +397,6 @@ function jsNameBindings(host, { jsImported, declared, source }, extra = []) {
     );
 }
 
-// The names a node binds where it stands: a name stored or deleted, a `def`, a
-// `class`, an import alias, an `except … as` and a `match` capture. What the
-// symbol table counts as a binding, read back off the tree to say where.
-const bindsHere = (node) => {
-    const ast = globalThis.__BRYTHON__.ast;
-
-    if (node instanceof ast.Name) return node.ctx instanceof ast.Load ? [] : [node.id];
-    if (node instanceof ast.alias) return node.name === '*' ? [] : [node.asname ?? node.name.split('.')[0]];
-    if (node instanceof ast.MatchMapping) return node.rest ? [node.rest] : [];
-
-    const named = ['FunctionDef', 'AsyncFunctionDef', 'ClassDef', 'ExceptHandler', 'MatchAs', 'MatchStar'];
-
-    return named.some((one) => node instanceof ast[one]) && node.name ? [node.name] : [];
-};
-
 // A name `__js__` or `importjs` brings is JavaScript's import, which Python
 // reads live and never binds, as JavaScript never assigns one: an engine
 // refuses a module that declares an import and a `let` of the same name. So
@@ -417,13 +410,14 @@ const bindsHere = (node) => {
 // module's.
 function refuseBoundImports(host, ast, table, imported, source, at) {
     const $B = globalThis.__BRYTHON__;
-    const names = new Set(imported);
+    // Compared as Python reads both: `ｃｏｕｎｔ` imported is `count` bound.
+    const names = new Set(imported.map(pythonName));
 
     walkScoped(ast.body, (node, scope, line) => {
         const block = scope === null ? null : table.blockOf(scope);
         const module = (name) =>
             scope === null || (block !== undefined && scopeIn(block, name) === $B.SYMBOL_FLAGS.GLOBAL_EXPLICIT);
-        const name = bindsHere(node).find((one) => names.has(one) && module(one));
+        const name = bindsHere(node).find((one) => names.has(pythonName(one)) && module(one));
 
         if (name === undefined) return;
 
@@ -653,11 +647,9 @@ const UNSHIPPED_BUILTINS = {
 // it on. So does reaching it through the `builtins` module.
 const BUILTINS_MODULES = new Set(['builtins', '__builtins__']);
 
-// A name JavaScript gives the module (`external`), `importjs {open}`, is no
-// builtin, as the translation reads it.
-function refuseLibraryCalls(host, ast, table, source, at, external = []) {
+function refuseLibraryCalls(host, ast, table, source, at) {
     const $B = globalThis.__BRYTHON__;
-    const builtin = builtinIn(table, new Set([...moduleBinds(table), ...external]));
+    const builtin = builtinIn(table, moduleBinds(table));
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
 
     // The names that are the builtins module, `import builtins [as b]`, by the

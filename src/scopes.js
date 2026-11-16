@@ -78,11 +78,12 @@ function walkScoped(body, enter) {
 }
 
 // A name is the builtin where no scope binds it: not the block's own, not an
-// enclosing function's, not the module's.
+// enclosing function's, not the module's, and not one JavaScript gives the
+// module (`table.external`, which a compile sets, in Python's spelling).
 const builtinIn = (table, bound) => (name, scope) => {
     const block = scope === null ? null : table.blockOf(scope);
     if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name))) return false;
-    return !bound.has(name);
+    return !bound.has(name) && !table.external?.has(name);
 };
 
 // Python's symbol table for a module, built once per compile: the module's
@@ -130,6 +131,57 @@ const blockBinds = (block) => {
 
 const moduleBinds = (table) => blockBinds(table.top);
 
+// The builtins that read a value and keep nothing of it: given `__all__` or
+// `__js__`, they cannot change it behind the compiler's back.
+const READS_ONLY = new Set([
+    'len', 'list', 'tuple', 'sorted', 'set', 'frozenset', 'iter', 'enumerate', 'reversed',
+    'str', 'repr', 'print', 'any', 'all', 'min', 'max', 'sum', 'zip'
+]);
+
+// Whether a read of a value the compiler reads statically, `__all__` or
+// `__js__`, keeps it where the compiler sees it. Handed on, `names = __all__`,
+// `alias = __js__["m"]` or `list.clear(__all__)`, it can be changed by what no
+// static reading follows. `builtin(name)` says whether the name is the builtin
+// there, and not a function of the author's that took its name. A method
+// called on it keeps it only where the compiler runs the statement (`methods`):
+// `__all__`'s, not `__js__`'s.
+const keepsValue = (parent, grand, node, builtin, methods = true) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return (
+        (methods && parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent) ||
+        (parent instanceof $B.ast.Subscript && parent.value === node && parent.ctx instanceof $B.ast.Load) ||
+        parent instanceof $B.ast.Compare ||
+        parent instanceof $B.ast.BinOp ||
+        parent instanceof $B.ast.Starred ||
+        parent instanceof $B.ast.FormattedValue ||
+        parent instanceof $B.ast.Expr ||
+        ((parent instanceof $B.ast.For || parent instanceof $B.ast.AsyncFor || parent instanceof $B.ast.comprehension) &&
+            parent.iter === node) ||
+        (COMPREHENSIONS.some((one) => parent instanceof $B.ast[one]) && parent.generators[0].iter === node) ||
+        (parent instanceof $B.ast.Call &&
+            parent.func instanceof $B.ast.Name &&
+            READS_ONLY.has(parent.func.id) &&
+            builtin(parent.func.id) &&
+            parent.args.includes(node))
+    );
+};
+
+// The names a node binds where it stands: a name stored or deleted, a `def`, a
+// `class`, an import alias, an `except … as` and a `match` capture. What the
+// symbol table counts as a binding, read back off the tree to say where.
+const bindsHere = (node) => {
+    const ast = globalThis.__BRYTHON__.ast;
+
+    if (node instanceof ast.Name) return node.ctx instanceof ast.Load ? [] : [node.id];
+    if (node instanceof ast.alias) return node.name === '*' ? [] : [node.asname ?? node.name.split('.')[0]];
+    if (node instanceof ast.MatchMapping) return node.rest ? [node.rest] : [];
+
+    const named = ['FunctionDef', 'AsyncFunctionDef', 'ClassDef', 'ExceptHandler', 'MatchAs', 'MatchStar'];
+
+    return named.some((one) => node instanceof ast[one]) && node.name ? [node.name] : [];
+};
+
 // The names a module reads as globals. Asked of the AST, because the question
 // is about a **name**, and a `Constant` whose value happens to read the same is
 // not one. Nor is every `Name`: a parameter or a local of that spelling reads
@@ -163,5 +215,8 @@ export {
     isGlobalScope,
     blockBinds,
     moduleBinds,
+    bindsHere,
+    READS_ONLY,
+    keepsValue,
     globalReads
 };

@@ -87,6 +87,17 @@ test('a list read off the list is handed on as the list is', () => {
     expect(exported('def a(): pass\n__all__ = ["a"]\nprint(__all__[0])\n').names).toEqual(['a']);
 });
 
+// A JavaScript import spelled like a builtin that only reads is the import, not
+// the builtin: the list it makes is not known before the module runs.
+test('a list made by a JavaScript import spelled like a builtin is refused, as one made by any name', () => {
+    for (const name of ['list', 'sorted']) {
+        expect(() => exported(`__js__ = {"./api.mjs": ["${name}"]}\ndef a(): pass\n__all__ = ${name}(["a"])\n`)).toThrow(
+            new RegExp(`\`__all__\` is computed from \`${name}\``)
+        );
+    }
+    expect(exported('def a(): pass\n__all__ = list(["a"])\n').names).toEqual(['a']);
+});
+
 test('a raise at import is refused where it is raised', () => {
     expect(() => exported('__all__ = ("load",)\n__all__.append("x")\n')).toThrow(
         /^host — Python raises `AttributeError: 'tuple' object has no attribute 'append'` here when the module is imported, so `__all__` has no value to export \(src\/probe\.py:2\)$/

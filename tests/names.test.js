@@ -68,6 +68,41 @@ test('a path of `__js__` is the string Python reads, a quote and a backslash in 
     expect(jsImports.map((one) => one.from)).toEqual(["./O'Brien.js", './back\\slash.js']);
 });
 
+// **The directive is a dict assigned at the top of the module, and nothing else
+// touches the module's `__js__`**: a binding in a branch, a loop, a
+// destructuring, a second target, an import, a `def`, a function's `global`, a
+// write to the dict or to one of its lists, or a read that hands it on, is
+// refused on its line. A function's own `__js__` is its own.
+test.each([
+    ['in a branch', 'if True:\n    __js__ = {"./a.js": ["kept"]}\n', 2],
+    ['destructured', '[__js__] = [{"./a.js": ["kept"]}]\n', 1],
+    ['by a global', 'def setup():\n    global __js__\n    __js__ = {"./a.js": ["kept"]}\n', 3],
+    ['with a second target', '__js__ = alias = {"./a.js": ["kept"]}\n', 1],
+    ['by a loop', 'for __js__ in [{}]:\n    pass\n', 1],
+    ['by an import', 'import json as __js__\n', 1],
+    ['by a def', 'def __js__():\n    pass\n', 1],
+    ['handed on', '__js__ = {"./a.js": ["kept"]}\nalias = __js__\n', 2],
+    ['through one of its lists', '__js__ = {"./a.js": ["kept"]}\n__js__["./a.js"].append("more")\n', 2],
+    ['deleted', '__js__ = {"./a.js": ["kept"]}\ndel __js__\n', 2]
+])('`__js__` written %s is refused on its line', (form, src, line) => {
+    expect(() => bryc.compile(host, src, { name: 'a', source })).toThrow(new RegExp(`\`__js__\` is set by assigning it a dict .* \\(src/a\\.py:${line}\\)`));
+});
+
+test("`__js__` assigned at the top of the module is read, the last one counting, and a function's own is its own", () => {
+    const src = '__js__ = {"./a.js": ["gone"]}\n__js__ = {"./a.js": ["kept"]}\nn = len(__js__["./a.js"])\n\ndef f():\n    __js__ = 1\n    return __js__\n';
+
+    expect(bryc.compile(host, src, { name: 'a', source }).jsImports.flatMap((one) => one.entries.map((entry) => entry.name))).toEqual(['kept']);
+});
+
+// **A name JavaScript gives the module is Python's spelling of it, to every
+// analysis that asks**: `ｏｐｅｎ` is `open`, called as the import, and bound as
+// one is refused.
+test('a JavaScript name is read in Python spelling, by the refusals as by the translation', () => {
+    expect(() => bryc.compile(host, 'observed = open("value")\n', { name: 'a', source, jsNames: ['ｏｐｅｎ'] })).not.toThrow();
+    expect(() => bryc.compile(host, 'observed = help("value")\n', { name: 'a', source, jsNames: ['ｈｅｌｐ'] })).not.toThrow();
+    expect(bound('ｎａｖｉｇａｔｅ = 2\n')).toThrow(/`navigate` is a JavaScript import/);
+});
+
 // A name that starts with the keyword is a name, in a module and a component.
 test('`importjsé` is a name, not the keyword', () => {
     const src = 'importjsé = 7\nobserved = importjsé\n';
