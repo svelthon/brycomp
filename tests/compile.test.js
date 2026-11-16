@@ -119,6 +119,22 @@ test('a method spelled like a property of Object.prototype is no library call', 
     expect(refusal('help("constructor")\n').message).toMatch(/`help\("constructor"\)` looks the name up with `pydoc`/);
 });
 
+// A binding is dated by the statement that makes it, however deep its target:
+// `b` is the module `builtins` while the value of `((b,), slot) = …` is
+// computed, and `b.eval` is refused there as in `b, slot = …`.
+test('a builtin read off the module while a nested target rebinds its name is refused', () => {
+    for (const statement of [
+        'b, slot = b.eval, 0',
+        '((b,), slot) = ((b.eval,), 0)',
+        '(((b,),), slot) = (((b.open,),), 0)',
+        '[*b] = [b.eval]',
+        'for ((b,), slot) in [((b.eval,), 0)]:\n    pass'
+    ]) {
+        expect(refusal(`import builtins as b\n${statement}\n`).message).toMatch(/`(eval|open)\(\)`|\(src\/probe\.py:2\)/);
+    }
+    expect(() => bryc.compile(host, 'import builtins as b\n\nclass Api:\n    def open(self, x):\n        return x\n\n((b,), slot) = ((Api(),), 0)\nb.open("value")\n', options)).not.toThrow();
+});
+
 // A name JavaScript gives the module is no builtin, for a refusal as for the
 // translation: `importjs {open}` calls the import.
 test('a JavaScript name spelled like a refused builtin is called as the import', () => {

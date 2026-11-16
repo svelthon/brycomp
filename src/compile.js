@@ -76,15 +76,22 @@ export function compile(
     // A refusal stands on the line of the file, a template's function's on its
     // markup, as a syntax error does.
     const at = (line) => fileLine(line, lineOffset, ranges);
+
+    // The names JavaScript gives the module, its imports and those beside it,
+    // are no builtin to any analysis that asks the table (`builtinIn`), in
+    // Python's spelling: the ones `importjs` and the host give, before `__js__`
+    // is read, which adds its own.
+    const external = (names) => new Set(names.map(pythonName));
+
+    table.external = external([...bound, ...jsNames]);
+
     const jsImports = jsImportsOf(host, root._ast, table, source, at, lifted.imports);
     const jsImported = jsImports.flatMap((one) => one.entries.map((entry) => entry.local));
 
-    // The names JavaScript gives the module, its imports and those beside it,
-    // read as the module reads its own, and no builtin to any analysis that
-    // asks the table (`builtinIn`): a refusal's, the export list's.
-    const js = translation(host, root, [...jsImported, ...jsNames], translating);
+    table.external = external([...jsImported, ...jsNames]);
 
-    table.external = new Set([...jsImported, ...jsNames].map(pythonName));
+    // Read as the module reads its own.
+    const js = translation(host, root, [...jsImported, ...jsNames], translating);
     const namespace = moduleNamespace(host, js, source, named);
 
     const { found: importedAt, relative } = moduleImports(root._ast);

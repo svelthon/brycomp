@@ -88,6 +88,18 @@ test.each([
     expect(() => bryc.compile(host, src, { name: 'a', source })).toThrow(new RegExp(`\`__js__\` is set by assigning it a dict .* \\(src/a\\.py:${line}\\)`));
 });
 
+// A builtin's name the directive imports is JavaScript's function, which may
+// change what it is handed: `list(__js__)` hands the dict on.
+test('`__js__` handed to a JavaScript import spelled like a builtin is refused, and to the builtin is read', () => {
+    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["list", "kept"]}\nlist(__js__)\n', { name: 'a', source })).toThrow(
+        /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
+    );
+    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source })).not.toThrow();
+    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source, jsNames: ['list'] })).toThrow(
+        /`__js__` is set by assigning it a dict/
+    );
+});
+
 test("`__js__` assigned at the top of the module is read, the last one counting, and a function's own is its own", () => {
     const src = '__js__ = {"./a.js": ["gone"]}\n__js__ = {"./a.js": ["kept"]}\nn = len(__js__["./a.js"])\n\ndef f():\n    __js__ = 1\n    return __js__\n';
 

@@ -61,19 +61,6 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
         node instanceof $B.ast.Subscript && node.ctx instanceof $B.ast.Load && (isJs(node.value) || item(node.value));
     const directive = (node) => node instanceof $B.ast.Assign && node.targets.length === 1 && isJs(node.targets[0]);
     const written = new Set(body.filter(directive).map((node) => node.targets[0]));
-    const builtin = builtinIn(table, moduleBinds(table));
-
-    walkScoped(body, (node, scope, line, parent, grand) => {
-        if (written.has(node) || !(isJs(node) || item(node) || bindsHere(node).includes('__js__'))) return;
-
-        const block = scope === null ? null : table.blockOf(scope);
-        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__js__'))) return;
-
-        const read = (isJs(node) && node.ctx instanceof $B.ast.Load) || item(node);
-        if (read && keepsValue(parent, grand, node, (name) => builtin(name, scope), false)) return;
-
-        refuseAt(node, 'is set by assigning it a dict at the top of the module, and read or changed by nothing else');
-    });
 
     for (const node of body) {
         if (!directive(node)) continue;
@@ -104,6 +91,23 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
         });
         modules = [...lists].map(([from, names]) => ({ from, names }));
     }
+
+    // Read once the directive is: a builtin's name it imports is JavaScript's
+    // function, and `list(__js__)` hands the dict to it.
+    const imported = new Set(modules.flatMap((one) => one.names).map(pythonName));
+    const builtin = builtinIn(table, new Set([...moduleBinds(table), ...imported]));
+
+    walkScoped(body, (node, scope, line, parent, grand) => {
+        if (written.has(node) || !(isJs(node) || item(node) || bindsHere(node).includes('__js__'))) return;
+
+        const block = scope === null ? null : table.blockOf(scope);
+        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__js__'))) return;
+
+        const read = (isJs(node) && node.ctx instanceof $B.ast.Load) || item(node);
+        if (read && keepsValue(parent, grand, node, (name) => builtin(name, scope), false)) return;
+
+        refuseAt(node, 'is set by assigning it a dict at the top of the module, and read or changed by nothing else');
+    });
 
     return modules.filter((one) => one.names.length);
 }
@@ -732,7 +736,14 @@ function refuseLibraryCalls(host, ast, table, source, at) {
         const from = blockAt(scope);
         events.push({ name, from, target: bindingBlock(name, from), at, isImport });
     };
-    walkScoped(ast.body, (node, scope, line, parent, grand) => {
+    // A target's parents, climbed to the statement that binds it, however deep
+    // the destructuring: `((b,), slot) = ((b.eval,), 0)` binds `b` once the
+    // value is computed, as `b, slot = …` does.
+    const above = new WeakMap();
+
+    walkScoped(ast.body, (node, scope, line, parent) => {
+        if (parent !== null) above.set(node, parent);
+
         if (node instanceof $B.ast.Import || node instanceof $B.ast.ImportFrom) {
             for (const one of node.names) {
                 const local = one.asname ?? one.name.split('.')[0];
@@ -745,7 +756,8 @@ function refuseLibraryCalls(host, ast, table, source, at) {
         if (node instanceof $B.ast.ExceptHandler && node.name) bindAt(node.name, scope, start(node.body[0]), false);
 
         if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Store) {
-            const owner = SEQUENCES.some((one) => parent instanceof $B.ast[one]) ? grand : parent;
+            let owner = parent;
+            while (SEQUENCES.some((one) => owner instanceof $B.ast[one])) owner = above.get(owner) ?? null;
             const at =
                 owner instanceof $B.ast.For || owner instanceof $B.ast.AsyncFor
                     ? start(owner.body[0])
