@@ -471,10 +471,16 @@ const liveExportLines = (host, { exported, jsImported, source }) =>
 // A body that raises leaves its namespace to whoever holds it, and the next
 // import runs in a new one, which the function hands back to be the module's,
 // with what the host renews beside it (`renewed`, statements).
+//
+// A module is published under its name when Python can import it by that name,
+// each part between dots an identifier, `pkg.worker` as `worker`; `+page.server`
+// is published under none.
 function moduleLoad(host, { name, eager = false, run, renewed = [] }) {
+    const importable = name.split('.').every((part) => PY_NAME.test(part));
+
     return [
         ``,
-        `${eager ? '' : 'export default '}${host.runtime.pythonModule}(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, ` +
+        `${eager ? '' : 'export default '}${host.runtime.pythonModule}(${NS}, ${importable ? JSON.stringify(name) : 'null'}, ` +
             `(${NEXT_VALUE}) => { ${NS} = ${NEXT_VALUE};${renewed.map((one) => ` ${one}`).join('')} }, () => {`,
         ...run.map((line) => (line === '' ? line : `    ${line}`)),
         eager ? `})();` : `});`

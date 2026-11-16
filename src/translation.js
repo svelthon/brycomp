@@ -189,7 +189,7 @@ const runtimeAliases = (host, names) =>
 // reserves a prefix Brython's code opens with (`var $B`), never parses this.
 function moduleCode(host, { js, namespace, source }) {
     return [
-        `import { ${runtimeAliases(host, ['withNamespace', 'pyError'])} } from '${host.bridge}';`,
+        `import { ${runtimeAliases(host, ['withNamespace', 'pyError'])} } from ${JSON.stringify(host.bridge)};`,
         ``,
         `export function init(${NS}) {`,
         `  try {`,

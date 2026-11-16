@@ -274,14 +274,18 @@ test('the module imports its runtime from the bridge, under the names the host g
     const code = (host) => compiled(host).module.split('\n');
 
     expect(code(plain).slice(0, 5)).toEqual([
-        "import { withNamespace, pyError } from 'host/bridge';",
+        'import { withNamespace, pyError } from "host/bridge";',
         '',
         `export function init(${NS}) {`,
         '  try {',
         `    return withNamespace("src/a_py", ${NS}, () => {`
     ]);
     expect(code(plain).slice(-3)).toEqual(['    });', '  } catch (err) { throw pyError(err,"src/a.py"); }', '}']);
-    expect(code(prefixed)[0]).toBe("import { withNamespace as __withNamespace, pyError as __pyError } from 'host/bridge';");
+    expect(code(prefixed)[0]).toBe('import { withNamespace as __withNamespace, pyError as __pyError } from "host/bridge";');
+    // A path is written as a JavaScript string, a quote in it escaped.
+    expect(compiled({ ...plain, bridge: "./O'Brien/bridge.mjs" }).module.split('\n')[0]).toBe(
+        'import { withNamespace, pyError } from "./O\'Brien/bridge.mjs";'
+    );
     expect(code(prefixed)[4]).toBe(`    return __withNamespace("src/a_py", ${NS}, () => {`);
 });
 

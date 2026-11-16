@@ -194,3 +194,17 @@ test('an eager module runs it as it is evaluated, and a name no import writes is
     expect(lines[1]).toBe(`pythonModule(${NS}, null, (${next}) => { ${NS} = ${next}; }, () => {`);
     expect(lines.at(-1)).toBe('})();');
 });
+
+// A name each part of which is an identifier is one `import` writes, a dotted
+// one too; a part empty or no identifier makes it none.
+test('a qualified module name is published, and one no import writes is none', () => {
+    const published = (name) => bryc.moduleLoad(host, { name, run: [] })[1].split(', ')[1];
+
+    expect(['shop.worker', 'a.sub.worker', 'équipe.outil', 'cart'].map(published)).toEqual([
+        '"shop.worker"',
+        '"a.sub.worker"',
+        '"équipe.outil"',
+        '"cart"'
+    ]);
+    expect(['+page.server', 'pkg..worker', '.worker', 'worker.'].map(published)).toEqual(['null', 'null', 'null', 'null']);
+});
