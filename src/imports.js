@@ -31,13 +31,13 @@ const strings = (given) => given.filter((one) => typeof one === 'string');
 // ordinary assignment and read from the AST like `__all__`, under the same two
 // rules: the value that counts is the last one assigned, and what a static read
 // cannot follow is refused rather than skipped.
-function declaredJsImports(host, ast, table, source, lineOffset = 0) {
+function declaredJsImports(host, ast, table, source, at = (line) => line) {
     const $B = globalThis.__BRYTHON__;
     const body = ast.body;
     let modules = [];
 
     const refuseAt = (node, what) => {
-        const line = node.lineno + lineOffset;
+        const line = at(node.lineno);
 
         throw refuse(`${host.name} — \`__js__\` ${what} (${source}:${line})`, source, line);
     };
@@ -69,7 +69,11 @@ function declaredJsImports(host, ast, table, source, lineOffset = 0) {
             refuseAt(node, 'has to be written out as a dict of module names to lists of names');
         }
 
-        modules = node.value.keys.map((key, index) => {
+        // A key written twice holds its last list, at its first place, as in
+        // the dict Python builds.
+        const lists = new Map();
+
+        node.value.keys.forEach((key, index) => {
             const names = NAMES(node.value.values[index]);
 
             if (!(key instanceof $B.ast.Constant) || typeof key.value !== 'string' || !readable(names)) {
@@ -83,8 +87,9 @@ function declaredJsImports(host, ast, table, source, lineOffset = 0) {
                 if (why !== null) refuseAt(node, `names \`${one}\`, ${why}`);
             }
 
-            return { from: key.value, names: strings(names) };
+            lists.set(key.value, strings(names));
         });
+        modules = [...lists].map(([from, names]) => ({ from, names }));
     }
 
     return modules.filter((one) => one.names.length);
@@ -301,8 +306,8 @@ function jsImportLine(host, one) {
 // The JavaScript a source imports, both declarations met in one shape:
 // `__js__` is the module's and only ever names, `importjs` is the component's
 // (`lifted`, what `takeImportJs` took out of it) and covers the four forms.
-const jsImportsOf = (host, ast, table, source, lineOffset, lifted) => [
-    ...declaredJsImports(host, ast, table, source, lineOffset).map((one) => ({
+const jsImportsOf = (host, ast, table, source, at, lifted) => [
+    ...declaredJsImports(host, ast, table, source, at).map((one) => ({
         from: one.from,
         kind: 'named',
         entries: one.names.map((n) => ({ name: n, local: n }))
@@ -404,7 +409,7 @@ const bindsHere = (node) => {
 // scope. Asked node by node and not of the module's block, where Python also
 // files the variable of a comprehension it inlines, which binds nothing of the
 // module's.
-function refuseBoundImports(host, ast, table, imported, source, lineOffset) {
+function refuseBoundImports(host, ast, table, imported, source, at) {
     const $B = globalThis.__BRYTHON__;
     const names = new Set(imported);
 
@@ -418,10 +423,10 @@ function refuseBoundImports(host, ast, table, imported, source, lineOffset) {
 
         throw refuse(
             `${host.name} — \`${name}\` is a JavaScript import, which Python reads and never binds, as ` +
-                `JavaScript never assigns one (${source}:${line + lineOffset}). Bind another name to hold ` +
+                `JavaScript never assigns one (${source}:${at(line)}). Bind another name to hold ` +
                 `a value of your own.`,
             source,
-            line + lineOffset
+            at(line)
         );
     });
 }
@@ -504,13 +509,13 @@ function moduleImports(ast) {
 // A relative import has no package to be relative to, and fails at mount with
 // `ImportError`. A neighbouring module is named by its own name, which is what
 // the refusal writes out.
-function refuseRelativeImports(host, relative, source, lineOffset) {
+function refuseRelativeImports(host, relative, source, at) {
     const [node] = relative;
     if (!node) return;
 
     const aliases = node.names.map((one) => (one.asname ? `${one.name} as ${one.asname}` : one.name)).join(', ');
     const absolute = node.module ? `from ${node.module} import ${aliases}` : `import ${aliases}`;
-    const line = node.lineno + lineOffset;
+    const line = at(node.lineno);
 
     throw refuse(
         `${host.name} — a relative import has no package to be relative to: a module ` +
@@ -543,7 +548,7 @@ const PROVIDED_MODULES = new Set([
 // `resolves` answers `'file'`, `'package'` when the name's first segment is a
 // directory of the project, or nothing. What stands in for the module is the
 // host's to say (`host.instead`), since it names what the host provides.
-function refuseMissingModules(host, importedAt, resolves, source, lineOffset) {
+function refuseMissingModules(host, importedAt, resolves, source, at) {
     for (const [module, line] of importedAt) {
         const found = PROVIDED_MODULES.has(module) ? 'file' : resolves(module);
         if (found === 'file') continue;
@@ -567,9 +572,9 @@ function refuseMissingModules(host, importedAt, resolves, source, lineOffset) {
 
         throw refuse(
             `${host.name} — \`${module}\` is not a module a component can import: ` +
-                `${reason} (${source}:${line + lineOffset})`,
+                `${reason} (${source}:${at(line)})`,
             source,
-            line + lineOffset
+            at(line)
         );
     }
 }
@@ -580,13 +585,13 @@ function refuseMissingModules(host, importedAt, resolves, source, lineOffset) {
 // component died at mount on `Network error`. Refused on its line, as an import
 // of a module that does not ship is. Recognised by shape, for the reason
 // `moduleImports` gives: an alias holds its parameters and no body.
-function refuseTypeParameters(host, body, source, lineOffset) {
+function refuseTypeParameters(host, body, source, at) {
     const walk = (statements) => {
         for (const node of statements) {
             const alias = Array.isArray(node.type_params) && node.body === undefined;
 
             if (alias || node.type_params?.length > 0) {
-                const line = node.lineno + lineOffset;
+                const line = at(node.lineno);
                 const written = alias
                     ? `type ${node.name.id} = …`
                     : `${node.bases ? 'class' : 'def'} ${node.name}[${node.type_params.map((one) => one.name).join(', ')}]`;
@@ -642,7 +647,7 @@ const UNSHIPPED_BUILTINS = {
 // it on. So does reaching it through the `builtins` module.
 const BUILTINS_MODULES = new Set(['builtins', '__builtins__']);
 
-function refuseLibraryCalls(host, ast, table, source, lineOffset) {
+function refuseLibraryCalls(host, ast, table, source, at) {
     const $B = globalThis.__BRYTHON__;
     const builtin = builtinIn(table, moduleBinds(table));
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
@@ -768,9 +773,9 @@ function refuseLibraryCalls(host, ast, table, source, lineOffset) {
     };
     const refuseBuiltin = (name, line) => {
         throw refuse(
-            `${host.name} — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${line + lineOffset})`,
+            `${host.name} — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${at(line)})`,
             source,
-            line + lineOffset
+            at(line)
         );
     };
 
@@ -814,7 +819,7 @@ function refuseLibraryCalls(host, ast, table, source, lineOffset) {
 
         if (module === undefined && !documented) return;
 
-        line += lineOffset;
+        line = at(line);
 
         throw refuse(
             module !== undefined

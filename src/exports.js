@@ -273,6 +273,15 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
     for (const node of body) {
         if (!simple.some((kind) => node instanceof $B.ast[kind]) || !hasWrite(node)) continue;
 
+        // A second target may hold the same list, and what is done to it through
+        // that name is out of sight: `__all__ = names = []`, or `names, __all__ =
+        // [[]] * 2`, then `names.append`.
+        const unpacked = (target) => target instanceof $B.ast.Tuple || target instanceof $B.ast.List;
+
+        if (node instanceof $B.ast.Assign && (node.targets.length > 1 || node.targets.some(unpacked))) {
+            refuseUnreadable(node, 'assigned to another target as well');
+        }
+
         const why = unspelled(node, (name) => PURE_BUILTINS.has(name) && !bound.has(name));
         if (why !== null) refuseUnreadable(node, why);
 

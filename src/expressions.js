@@ -256,8 +256,9 @@ export function targetTree(expr) {
 // shadows was read all the same, before the expression ran, and its default
 // with it, where Svelte reads none. Read off the tree the engine's parser
 // makes, and off the text where it makes none, which the compiler then
-// refuses. A walrus's target is taken as read, as it was. Its parentheses let
-// it run over lines, as it does between braces.
+// refuses. A walrus's target is taken as read, as it was, save in a lambda,
+// whose own it is, its comprehensions' too. Its parentheses let it run over
+// lines, as it does between braces.
 export const freeNames = (text) => {
     const tree = targetTree(`(${text}\n)`);
 
@@ -270,6 +271,20 @@ export const freeNames = (text) => {
         if (node instanceof ast.Name) into.add(node.id);
         else if (node instanceof ast.Tuple || node instanceof ast.List) for (const one of node.elts) targets(one, into);
         else if (node instanceof ast.Starred) targets(node.value, into);
+    };
+    // A lambda inside binds its own, all but what its defaults bind.
+    const walrused = (node, into) => {
+        if (Array.isArray(node)) {
+            for (const one of node) walrused(one, into);
+            return;
+        }
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+        if (node instanceof ast.NamedExpr) targets(node.target, into);
+        if (node instanceof ast.Lambda) {
+            walrused([node.args.defaults, node.args.kw_defaults], into);
+            return;
+        }
+        for (const field of node.constructor._fields) walrused(node[field], into);
     };
     const visit = (node, bound) => {
         if (Array.isArray(node)) {
@@ -291,6 +306,7 @@ export const freeNames = (text) => {
             for (const one of [...args.posonlyargs, ...args.args, ...args.kwonlyargs, args.vararg, args.kwarg]) {
                 if (one) own.add(one.arg);
             }
+            walrused(node.body, own);
             visit(node.body, own);
             return;
         }

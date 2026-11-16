@@ -48,6 +48,25 @@ test("a function's own name of that spelling binds nothing of the module's", () 
     expect(bound('def go():\n    navigate = 1\n    return navigate\n')).not.toThrow();
 });
 
+// A key written twice holds its last list, as the dict Python builds does: the
+// first list's names, imported as well, were refused by a module that no longer
+// exports them.
+test('a module named twice in `__js__` imports the last list alone', () => {
+    const { jsImports } = bryc.compile(host, '__js__ = {"./v.js": ["removed"], "./w.js": ["w"], "./v.js": ["kept"]}\n', { name: 'a', source });
+
+    expect(jsImports.map((one) => [one.from, one.entries.map((entry) => entry.name)])).toEqual([
+        ['./v.js', ['kept']],
+        ['./w.js', ['w']]
+    ]);
+});
+
+// A walrus in a lambda binds the lambda's own name, its comprehension's too,
+// which no value of the template's stands for.
+test("a walrus in a lambda reads no name of the template's", () => {
+    expect(['(lambda: (x := 1))()', '(lambda: ((x := 1), x))()', '(lambda: ([(x := y) for y in [1]], x))()'].map(bryc.freeNames)).toEqual([[], [], []]);
+    expect([bryc.freeNames('(lambda y=x: y)()'), bryc.freeNames('(lambda: (lambda: (x := 1)) and x)()')]).toEqual([['x'], ['x']]);
+});
+
 // **A name JavaScript gives the module is published to Python under the name
 // Python reads**, on the namespace's accessors through the host's runtime:
 // read afresh at every access, an import read-only, as JavaScript holds it. A

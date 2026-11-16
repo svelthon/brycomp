@@ -72,6 +72,14 @@ test('a list computed from a name is refused on its line, under the host\'s name
     expect(error.start).toEqual({ line: 12, column: 0 });
 });
 
+test('a list bound to a second target is refused, which a change through that name escapes', () => {
+    for (const bound of ['__all__ = alias = ["a"]', 'alias, __all__ = [["a"]] * 2', '[alias, *__all__] = [["a"]] * 2']) {
+        expect(() => exported(`def a(): pass\ndef b(): pass\n${bound}\nalias.append("b")\n`)).toThrow(
+            /^host — `__all__` is assigned to another target as well, and the export list is read from the source/
+        );
+    }
+});
+
 test('a raise at import is refused where it is raised', () => {
     expect(() => exported('__all__ = ("load",)\n__all__.append("x")\n')).toThrow(
         /^host — Python raises `AttributeError: 'tuple' object has no attribute 'append'` here when the module is imported, so `__all__` has no value to export \(src\/probe\.py:2\)$/

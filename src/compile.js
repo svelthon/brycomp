@@ -17,6 +17,7 @@ import {
     refuseBoundImports,
     refuseLibraryCalls
 } from './imports.js';
+import { fileLine } from './errors.js';
 
 // `text` is the script as its author wrote it, and for a component `defs`,
 // `defLines` and `defColumns` the functions its template compiled to, with
@@ -71,7 +72,10 @@ export function compile(
     // Python's symbol table, which says what every name means in every scope.
     const table = symbolTable(root._ast, source);
 
-    const jsImports = jsImportsOf(host, root._ast, table, source, lineOffset, lifted.imports);
+    // A refusal stands on the line of the file, a template's function's on its
+    // markup, as a syntax error does.
+    const at = (line) => fileLine(line, lineOffset, ranges);
+    const jsImports = jsImportsOf(host, root._ast, table, source, at, lifted.imports);
     const jsImported = jsImports.flatMap((one) => one.entries.map((entry) => entry.local));
 
     // The names JavaScript gives the module, its imports and those beside it,
@@ -81,11 +85,11 @@ export function compile(
 
     const { found: importedAt, relative } = moduleImports(root._ast);
 
-    refuseRelativeImports(host, relative, source, lineOffset);
-    if (resolves) refuseMissingModules(host, importedAt, resolves, source, lineOffset);
-    refuseTypeParameters(host, root._ast.body, source, lineOffset);
-    refuseBoundImports(host, root._ast, table, jsImported, source, lineOffset);
-    refuseLibraryCalls(host, root._ast, table, source, lineOffset);
+    refuseRelativeImports(host, relative, source, at);
+    if (resolves) refuseMissingModules(host, importedAt, resolves, source, at);
+    refuseTypeParameters(host, root._ast.body, source, at);
+    refuseBoundImports(host, root._ast, table, jsImported, source, at);
+    refuseLibraryCalls(host, root._ast, table, source, at);
 
     const module = moduleCode(host, { js, namespace, source });
 

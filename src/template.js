@@ -64,6 +64,9 @@ function templateDots(host, def) {
     const edits = [];
     const insert = (at, text, node) => edits.push({ from: at, to: at, text, size: end(node) - begin(node) });
     const replace = (from, to, text) => edits.push({ from, to, text, size: 0 });
+    // The line breaks of a text replaced, kept inside the call's parentheses,
+    // so what follows stays on its line.
+    const breaks = (from, to) => '\n'.repeat(def.slice(from, to).split('\n').length - 1);
     // Two texts around a node, outside everything the node holds: the opening
     // one before every opening text at its start, the closing one after every
     // closing text at its end. Half a character wider than the node is what
@@ -178,7 +181,7 @@ function templateDots(host, def) {
             // the call opens before them and they close around the object.
             const closers = def.slice(end(target), begin(node.value)).replace(/[\s=]/g, '');
             insert(begin(node), `${writeAttr}(`, node);
-            replace(dot(target), begin(node.value), `${closers}, ${JSON.stringify(target.attr)}, `);
+            replace(dot(target), begin(node.value), `${closers}, ${JSON.stringify(target.attr)},${breaks(dot(target), begin(node.value))} `);
             insert(end(node.value), ')', node.value);
             visit(target.value, shadowed);
             visit(node.value, shadowed);
@@ -187,7 +190,7 @@ function templateDots(host, def) {
 
         if (node instanceof $B.ast.Attribute && node.ctx instanceof $B.ast.Load) {
             insert(begin(node), `${readAttr}(`, node);
-            replace(dot(node), end(node), `, ${JSON.stringify(node.attr)})`);
+            replace(dot(node), end(node), `, ${JSON.stringify(node.attr)}${breaks(dot(node), end(node))})`);
         }
 
         // A debug field, `{row.name=}`, prints the text of its expression, and

@@ -58,8 +58,11 @@ function compilePython(host, text, { name, source, named = null, lineOffset = 0,
     // to a name, which is how its own importer names what it imports. A module
     // is named as `import` finds it, so `__name__` and the `__module__` of what
     // it defines are that name, and `__file__` stays the path.
+    // Unnamed, the module is named after its file whatever a name an earlier
+    // import left there, which is the namespace `moduleNamespace` looks for.
     const mapped = $B.url2name[source];
     if (named !== null) $B.url2name[source] = named;
+    else delete $B.url2name[source];
 
     // A name nothing in the module binds is searched for at each read, through
     // the locals of the function reading it first, whose class the engine asks
@@ -245,13 +248,16 @@ function vlq(value) {
 // (`fileLine`): a template function's, which follows the script, to its markup.
 function sourceMap(generated, source, content, lineOffset, ranges = []) {
     // The line, and for a `class` the kind of statement after it, `'ClassDef'`.
+    // Read with the line's strings taken out: a Python string holding the
+    // marker's text is data, `'$B.set_lineno(frame, 9000)'`.
     const marker = /\$B\.set_lineno\(frame, (\d+)[,)]/;
+    const strings = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
     const segments = [];
     let previous = 0;
     let current = null;
 
     for (const line of generated.split('\n')) {
-        const found = line.match(marker);
+        const found = line.includes('set_lineno') && line.replace(strings, "''").match(marker);
         if (found) current = fileLine(Number(found[1]), lineOffset, ranges) - 1;
 
         if (current === null) {

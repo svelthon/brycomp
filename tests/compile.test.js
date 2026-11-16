@@ -99,6 +99,13 @@ test("an error in a template's function is refused at the markup, the expression
     expect(error.start).toEqual({ line: 7, column: 4 });
 });
 
+// So is a refusal of what Python accepts, a call that cannot run in the page.
+test("a refusal in a template's function stands on the markup's line", () => {
+    const error = refusal('x = 1\n', { component: true, defs: ['def __expr_0():\n    return eval("2")'], defLines: [100], defColumns: [6] });
+
+    expect([error.message.match(/\(src\/probe\.py:\d+\)/)?.[0], error.start?.line]).toEqual(['(src/probe.py:100)', 100]);
+});
+
 // **A table of names is asked for its own**: a method called `toString` or
 // `hasOwnProperty`, a JavaScript object's, was taken for one that imports a
 // module, the one `Object.prototype` held under that name, and refused; and
@@ -195,6 +202,14 @@ test("a class's lines map to its line, which Brython marks with the kind of stat
     expect([original[at], original[at + 1]]).toEqual([0, 0]);
 });
 
+// The marker's text in a Python string is data, and moves no line.
+test("a string holding the marker's text maps to its own line", () => {
+    const { module, map } = bryc.compile(host, 'x = "$B.set_lineno(frame, 9000)"\ny = 2\n', options);
+    const at = module.split('\n').findIndex((one) => one.includes('9000'));
+
+    expect(originalLines(map.mappings)[at]).toBe(0);
+});
+
 // A template's function follows the script in the Python compiled, and its
 // lines map to the markup its expression is written on, as an error raised in
 // it is placed: moved by the script's offset alone, an expression of line 13
@@ -245,6 +260,19 @@ test('the module imports its runtime from the bridge, under the names the host g
 test('the namespace is the file, or the module Python imports it by', () => {
     expect(compiled(plain).namespace).toBe('src/a_py');
     expect(compiled(plain, 'shop-cart').namespace).toBe('shop_cart');
+});
+
+// A name an earlier import left for the file in the engine is not the file's
+// when the compile names none, and is there again afterwards.
+test('an unnamed module is named after its file, whatever name the engine held for it', () => {
+    const $B = globalThis.__BRYTHON__;
+
+    $B.url2name['src/a.py'] = 'earlier';
+    try {
+        expect([compiled(plain).namespace, $B.url2name['src/a.py']]).toEqual(['src/a_py', 'earlier']);
+    } finally {
+        delete $B.url2name['src/a.py'];
+    }
 });
 
 // **A compile runs the common half in its order, the host's own syntax made
@@ -405,6 +433,10 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     expect(bryc.templateDots(named('__getattr', '__setattr'), read)).toBe('def __expr_0(row):\n    return __text(__getattr(row, "name"))');
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __expr_0(row):\n    return __text(readAttr(row, "name"))');
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __expr_set_0(value, row):\n    writeAttr(row, "label", value)');
+    // A dot over two lines keeps the second, so the next line stays its own.
+    expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
+        'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
+    );
 });
 
 // A comprehension's target reads what it assigns into, `row` in
