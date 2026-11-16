@@ -653,9 +653,11 @@ const UNSHIPPED_BUILTINS = {
 // it on. So does reaching it through the `builtins` module.
 const BUILTINS_MODULES = new Set(['builtins', '__builtins__']);
 
-function refuseLibraryCalls(host, ast, table, source, at) {
+// A name JavaScript gives the module (`external`), `importjs {open}`, is no
+// builtin, as the translation reads it.
+function refuseLibraryCalls(host, ast, table, source, at, external = []) {
     const $B = globalThis.__BRYTHON__;
-    const builtin = builtinIn(table, moduleBinds(table));
+    const builtin = builtinIn(table, new Set([...moduleBinds(table), ...external]));
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
 
     // The names that are the builtins module, `import builtins [as b]`, by the

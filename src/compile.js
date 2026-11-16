@@ -89,7 +89,7 @@ export function compile(
     if (resolves) refuseMissingModules(host, importedAt, resolves, source, at);
     refuseTypeParameters(host, root._ast.body, source, at);
     refuseBoundImports(host, root._ast, table, jsImported, source, at);
-    refuseLibraryCalls(host, root._ast, table, source, at);
+    refuseLibraryCalls(host, root._ast, table, source, at, [...jsImported, ...jsNames]);
 
     const module = moduleCode(host, { js, namespace, source });
 

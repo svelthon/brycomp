@@ -80,6 +80,13 @@ test('a list bound to a second target is refused, which a change through that na
     }
 });
 
+test('a list read off the list is handed on as the list is', () => {
+    expect(() =>
+        exported('def a(): pass\ndef b(): pass\n__all__ = [["a"]]\nalias = __all__[0]\nalias.append("b")\n__all__ = __all__[0]\n')
+    ).toThrow(/^host — `__all__` is handed on where this file cannot follow what is done to it/);
+    expect(exported('def a(): pass\n__all__ = ["a"]\nprint(__all__[0])\n').names).toEqual(['a']);
+});
+
 test('a raise at import is refused where it is raised', () => {
     expect(() => exported('__all__ = ("load",)\n__all__.append("x")\n')).toThrow(
         /^host — Python raises `AttributeError: 'tuple' object has no attribute 'append'` here when the module is imported, so `__all__` has no value to export \(src\/probe\.py:2\)$/

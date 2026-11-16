@@ -101,11 +101,15 @@ function allWrites(ast, builtin = () => false) {
     const $B = globalThis.__BRYTHON__;
     const found = [];
 
+    // An item read off the list is handed on as the list is: a list inside it,
+    // `alias = __all__[0]`, is changed through `alias`.
+    const item = (node) =>
+        node instanceof $B.ast.Subscript && node.ctx instanceof $B.ast.Load && (isAll(node.value) || item(node.value));
+
     walkScoped(ast.body, (node, scope, line, parent, grand) => {
         if (writesAll(node)) found.push({ node, scope, line });
         if (
-            isAll(node) &&
-            node.ctx instanceof $B.ast.Load &&
+            ((isAll(node) && node.ctx instanceof $B.ast.Load) || item(node)) &&
             !keepsAll(parent, grand, node, (name) => builtin(name, scope))
         ) {
             found.push({ node, scope, line, escapes: true });

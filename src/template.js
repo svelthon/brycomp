@@ -44,18 +44,17 @@ function templateDots(host, def) {
     const begin = (node) => starts[node.lineno - 1] + node.col_offset;
     const end = (node) => starts[node.end_lineno - 1] + node.end_col_offset;
 
-    // The dot of `value.name`: behind the name, across any space between them.
-    // Bounded, so a position Brython stopped giving the way this reads it says
-    // so rather than walking off the start of the text for ever.
-    //
-    // Behind the name as written, which a name never holds a dot of, and not
-    // `node.attr.length` back: the attribute is the name normalized, as Python
-    // reads an identifier, so `box.ﬁeld` reads `field`, one character longer
-    // than its text.
+    // The dot of `value.name`: after the object, across the spaces, closing
+    // parentheses and comments between them, whose own dot, `# profile.name`,
+    // is none. Bounded, so a position Brython stopped giving the way this reads
+    // it says so rather than walking off the end of the text.
     const dot = (node) => {
-        let i = end(node) - 1;
-        while (i >= 0 && def[i] !== '.') i -= 1;
-        if (i < 0) throw new Error(`bryc — no dot found before \`${node.attr}\` in a template expression`);
+        let i = end(node.value);
+        while (i < def.length && def[i] !== '.') {
+            if (def[i] === '#') while (i < def.length && def[i] !== '\n') i += 1;
+            else i += 1;
+        }
+        if (i >= def.length) throw new Error(`bryc — no dot found before \`${node.attr}\` in a template expression`);
         return i;
     };
 

@@ -119,6 +119,18 @@ test('a method spelled like a property of Object.prototype is no library call', 
     expect(refusal('help("constructor")\n').message).toMatch(/`help\("constructor"\)` looks the name up with `pydoc`/);
 });
 
+// A name JavaScript gives the module is no builtin, for a refusal as for the
+// translation: `importjs {open}` calls the import.
+test('a JavaScript name spelled like a refused builtin is called as the import', () => {
+    for (const name of ['open', 'exec', 'compile', '__import__', 'help']) {
+        const call = `observed = ${name}("value")\n`;
+
+        expect(() => bryc.compile(host, `__js__ = {"./api.js": ["${name}"]}\n${call}`, options)).not.toThrow();
+        expect(() => bryc.compile(host, call, { ...options, jsNames: [name] })).not.toThrow();
+    }
+    expect(refusal('observed = open("value")\n').message).toMatch(/`open\(\)`/);
+});
+
 test('a source that compiles is Brython\'s translation of it', () => {
     expect(bryc.compile(host, 'total = 1 + 2\n', options).js).toContain('$B.set_lineno(frame, 1)');
 });
@@ -436,6 +448,10 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     // A dot over two lines keeps the second, so the next line stays its own.
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
         'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
+    );
+    // A dot in a comment is none.
+    expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    return (row. # see profile.name\n            name)')).toBe(
+        'def __expr_0(row):\n    return (readAttr(row, "name"\n))'
     );
     // A comment after a parenthesised target is left out of what closes it.
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
