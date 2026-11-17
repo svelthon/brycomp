@@ -82,10 +82,25 @@ test.each([
     ['by an import', 'import json as __js__\n', 1],
     ['by a def', 'def __js__():\n    pass\n', 1],
     ['handed on', '__js__ = {"./a.js": ["kept"]}\nalias = __js__\n', 2],
+    ['handed on in a union, which holds its lists', '__js__ = {"./a.js": ["kept"]}\nalias = __js__ | {}\n', 2],
+    ['handed on in a union the other way', '__js__ = {"./a.js": ["kept"]}\nalias = {} | __js__\n', 2],
     ['through one of its lists', '__js__ = {"./a.js": ["kept"]}\n__js__["./a.js"].append("more")\n', 2],
     ['deleted', '__js__ = {"./a.js": ["kept"]}\ndel __js__\n', 2]
 ])('`__js__` written %s is refused on its line', (form, src, line) => {
     expect(() => bryc.compile(host, src, { name: 'a', source })).toThrow(new RegExp(`\`__js__\` is set by assigning it a dict .* \\(src/a\\.py:${line}\\)`));
+});
+
+// An entry that is no string names no import: it was left out, where the
+// module still read it in its list.
+test('an entry of `__js__` that is no string is refused, named, on the line of the directive', () => {
+    for (const [entries, shown] of [
+        ['["first", 27]', '`27`, an `int`'],
+        ['[False]', '`False`, a `bool`']
+    ]) {
+        expect(() => bryc.compile(host, `__js__ = {"./numbers.mjs": ${entries}}\n`, { name: 'a', source })).toThrow(
+            `\`__js__\` lists ${shown}, for \`./numbers.mjs\`, and each entry is the name of an import, a string (src/a.py:1)`
+        );
+    }
 });
 
 // A builtin's name the directive imports is JavaScript's function, which may

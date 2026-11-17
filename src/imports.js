@@ -99,6 +99,20 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
                 refuseAt(node, 'has to be written out: each key a module name, each value a list of strings');
             }
 
+            // An entry that is no string names no import: left out, the
+            // module still read it in its list, and imported nothing for it.
+            const stray = names.find((one) => typeof one !== 'string');
+
+            if (stray !== undefined) {
+                const kind = $B.class_name(stray);
+
+                refuseAt(
+                    node,
+                    `lists \`${$B.builtins.repr(stray)}\`, ${/^[aeiou]/i.test(kind) ? 'an' : 'a'} \`${kind}\`, for ` +
+                        `\`${constantText(key.value)}\`, and each entry is the name of an import, a string`
+                );
+            }
+
             // The same question `importjs` asks, with the same answer.
             for (const one of strings(names)) {
                 const why = unbindable(one);
@@ -127,8 +141,12 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
         // of it, `__js__["m"].copy()`, hands on strings at most.
         const method = methodOn(parent, grand);
         const reads = [READS_KEYS, READS_LIST][subscripts(node)]?.has(method) === true;
+        // A union of the dict, `__js__ | {}`, is a copy of it, holding its lists.
+        const joined = parent instanceof $B.ast.BinOp && parent.op instanceof $B.ast.BitOr && subscripts(node) === 0;
 
-        if (read && (reads || keepsValue(parent, grand, node, (name) => builtin(name, scope), false) || handsOnItems(parent, node, 2, 0))) return;
+        if (read && !joined && (reads || keepsValue(parent, grand, node, (name) => builtin(name, scope), false) || handsOnItems(parent, node, 2, 0))) {
+            return;
+        }
 
         refuseAt(
             node,
