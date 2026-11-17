@@ -509,7 +509,7 @@ test("a host's template dot becomes its runtime's calls, under the names it give
 
     expect(bryc.templateDots(named('__getattr', '__setattr'), read)).toBe('def __expr_0(row):\n    return __text(__getattr(row, "name"))');
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __expr_0(row):\n    return __text(readAttr(row, "name"))');
-    expect(bryc.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __expr_set_0(value, row):\n    writeAttr(row, "label", value)');
+    expect(bryc.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __expr_set_0(value, row):\n    writeAttr(row, "label", (value))');
     // A dot over two lines keeps the second, so the next line stays its own.
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
         'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
@@ -535,8 +535,21 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     );
     // A comment after a parenthesised target is left out of what closes it.
     expect(bryc.templateDots(named('readAttr', 'writeAttr'), 'def __expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
-        'def __expr_set_0(value, row):\n    writeAttr((row), "label",\n\n value)'
+        'def __expr_set_0(value, row):\n    writeAttr((row), "label",\n\n (value))'
     );
+});
+
+// The value written is one argument, all that stands after the `=`: one in
+// parentheses of its own went before the object, `row(`, and a tuple handed
+// the helper four arguments.
+test('a write in a template hands its runtime the whole value, grouped or a tuple', () => {
+    const writing = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
+    const set = (value) => bryc.templateDots(writing, `def __expr_set_0(value, row):\n    row.label = ${value}`).split('\n').slice(1).join('\n');
+
+    expect(set('(value)')).toBe('    writeAttr(row, "label", ((value)))');
+    expect(set('(value + 1)')).toBe('    writeAttr(row, "label", ((value + 1)))');
+    expect(set('value, 1')).toBe('    writeAttr(row, "label", (value, 1))');
+    expect(set('(\n        value\n    )')).toBe('    writeAttr(row, "label", ((\n        value\n    )))');
 });
 
 // A comprehension's target reads what it assigns into, `row` in

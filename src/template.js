@@ -46,19 +46,22 @@ function templateDots(host, def) {
     const begin = (node) => starts[node.lineno - 1] + node.col_offset;
     const end = (node) => starts[node.end_lineno - 1] + node.end_col_offset;
 
-    // The dot of `value.name`: after the object, across the spaces, closing
-    // parentheses and comments between them, whose own dot, `# profile.name`,
-    // is none. Bounded, so a position Brython stopped giving the way this reads
-    // it says so rather than walking off the end of the text.
-    const dot = (node) => {
-        let i = end(node.value);
-        while (i < def.length && def[i] !== '.') {
+    // The first `sign` from a place on, across the spaces, closing parentheses
+    // and comments before it, whose own sign, `# profile.name`, is none.
+    // Bounded, so a position Brython stopped giving the way this reads it says
+    // so rather than walking off the end of the text.
+    const after = (from, sign) => {
+        let i = from;
+        while (i < def.length && def[i] !== sign) {
             if (def[i] === '#') while (i < def.length && def[i] !== '\n') i += 1;
             else i += 1;
         }
-        if (i >= def.length) throw new Error(`bryc — no dot found before \`${node.attr}\` in a template expression`);
+        if (i >= def.length) throw new Error(`bryc — no \`${sign}\` found where a template expression has one`);
         return i;
     };
+
+    // The dot of `value.name`, after the object.
+    const dot = (node) => after(end(node.value), '.');
 
     // `size` orders the insertions made at one place: the widest node's text
     // has to come first, so it is applied last.
@@ -180,10 +183,15 @@ function templateDots(host, def) {
         if (node instanceof $B.ast.Assign && node.targets.length === 1 && target instanceof $B.ast.Attribute) {
             // The target may stand between parentheses, `(row.label) = new`:
             // the call opens before them and they close around the object.
-            const closers = def.slice(end(target), begin(node.value)).replace(/#.*/g, '').replace(/[\s=]/g, '');
-            insert(begin(node), `${writeAttr}(`, node);
-            replace(dot(target), begin(node.value), `${closers}, ${JSON.stringify(target.attr)},${breaks(dot(target), begin(node.value))} `);
-            insert(end(node.value), ')', node.value);
+            // The value is one argument, all that stands after the `=`, which
+            // may open a parenthesis of its own, `(value)`, or be a tuple,
+            // `value, 1`.
+            const equals = after(end(target), '=');
+            const closers = def.slice(end(target), equals).replace(/#.*/g, '').replace(/\s/g, '');
+            let value = equals + 1;
+            while (def[value] === ' ' || def[value] === '\t') value += 1;
+            wrap(node, `${writeAttr}(`, '))');
+            replace(dot(target), value, `${closers}, ${JSON.stringify(target.attr)},${breaks(dot(target), value)} (`);
             visit(target.value, shadowed);
             visit(node.value, shadowed);
             return;
