@@ -383,9 +383,54 @@ test('the cell is the host\'s state, with the bump that moves its readers', () =
 test('the accessor reads and writes the cell as the host does, through track', () => {
     expect(bryc.stateBinding(host, 'count', '__ref_count')).toBe(
         `bind(${bryc.PROTO}, 'count', () => (SHAPING.on ? followOwn(__ref_count.value) : __ref_count.value), ` +
-            `(${next}) => { const __was = __bump_count.held; const __written = track(${next}, __bump_count);` +
-            ` if (!changesNothing(__written, __was)) __ref_count.value = __written; });`
+            `(${next}) => { const __was = __bump_count.held; try { const __written = track(${next}, __bump_count);` +
+            ` if (!changesNothing(__written, __was)) __ref_count.value = __written; }` +
+            ` catch (__refused) { track(__was, __bump_count); throw __refused; } });`
     );
+});
+
+// A write the host refuses before it stores it leaves what the name's readers
+// follow on the value the cell kept, where `track` had moved it onto the one
+// refused; the host's own error reaches the writer.
+test('a write the host refuses leaves the name followed as the cell holds it', () => {
+    const line = bryc.stateBinding(host, 'items', '__ref_items', { subs: '__subs' });
+    const refused = new Error('refused');
+    const cell = {
+        held: 'first',
+        get value() {
+            return this.held;
+        },
+        set value(given) {
+            if (given === 'second') throw refused;
+            this.held = given;
+        }
+    };
+    const bump = { held: undefined };
+    const subs = [];
+    const track = (value, moved, list) => {
+        moved.held = value;
+        list.length = 0;
+        list.push(value);
+        return value;
+    };
+    const proto = {};
+    const accessors = {};
+    const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
+
+    new Function(bryc.PROTO, '__ref_items', '__bump_items', '__subs', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', line)(
+        proto, cell, bump, subs, bind, { on: false }, (one) => one, track, (one, other) => one === other
+    );
+    accessors.set('first');
+
+    let error;
+
+    try {
+        accessors.set('second');
+    } catch (caught) {
+        error = caught;
+    }
+
+    expect([error, cell.value, bump.held, subs]).toEqual([refused, 'first', 'first', ['first']]);
 });
 
 // Told the name with the cell, on either branch, so a host reads the rows'

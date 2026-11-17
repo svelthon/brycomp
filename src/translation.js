@@ -322,12 +322,19 @@ const stateCell = (host, name, cell) => host.state.cell(name, cell, bump(name));
 // subscribe to. `subs` is the list an instance signs its containers onto, or
 // null for a module, which keeps them as long as the page; `held` the getter of
 // what the name holds as itself, for a function a decorator may have wrapped.
+//
+// A write the host refuses, before it stores the value as Svelte's state
+// refuses one, leaves the name followed as it was: `track` had moved what its
+// readers follow onto the value refused, while the cell kept the one before,
+// whose changes then told nobody.
 function stateBinding(host, name, cell, { subs = null, held = null } = {}) {
     const { bind, SHAPING, followOwn, track, changesNothing } = host.runtime;
+    const tracked = (value) => `${track}(${value}, ${bump(name)}${subs === null ? '' : `, ${subs}`})`;
     const write =
         `const __was = ${bump(name)}.held;` +
-        ` const __written = ${track}(${NEXT_VALUE}, ${bump(name)}${subs === null ? '' : `, ${subs}`});` +
-        ` if (!${changesNothing}(__written, __was)) ${host.state.write(cell, '__written')};`;
+        ` try { const __written = ${tracked(NEXT_VALUE)};` +
+        ` if (!${changesNothing}(__written, __was)) ${host.state.write(cell, '__written')}; }` +
+        ` catch (__refused) { ${tracked('__was')}; throw __refused; }`;
 
     return (
         `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${host.state.value(cell, name)}) : ${host.state.read(name, cell)}), ` +
