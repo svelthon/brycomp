@@ -25,38 +25,52 @@ import {
     moduleBinds,
     READS_ONLY,
     READS_LIST,
-    ITEMS_OUT,
     keepsValue,
     handsOnItems,
-    subscripts,
-    methodOn
+    handsOutItems,
+    subscripts
 } from './scopes.js';
 import { counterStart, engine, JS_RESERVED, PY_NAME, NS, NEXT_VALUE } from './translation.js';
 
 const isAll = (node) => node instanceof globalThis.__BRYTHON__.ast.Name && node.id === '__all__';
 
-// Whether a target writes `__all__`: the name, an item or a slice of it, or
-// either inside a tuple or a starred target.
+// `__all__`, or an item of it at any depth: `__all__[0][1]` is in the list,
+// and a change to it changes what the list ends with.
+const withinAll = (node) => isAll(node) || (node instanceof globalThis.__BRYTHON__.ast.Subscript && withinAll(node.value));
+
+// Whether a target writes `__all__`: the name, an item or a slice of it at any
+// depth, or either inside a tuple or a starred target.
 const targetsAll = (target) => {
     const ast = globalThis.__BRYTHON__.ast;
 
     return (
         isAll(target) ||
-        (target instanceof ast.Subscript && isAll(target.value)) ||
+        (target instanceof ast.Subscript && withinAll(target.value)) ||
         (target instanceof ast.Starred && targetsAll(target.value)) ||
         ((target instanceof ast.Tuple || target instanceof ast.List) && target.elts.some(targetsAll))
     );
 };
 
-// Whether a node, of any shape, writes `__all__`: a method that changes it,
-// an assignment, a deletion, a loop or `with` target, a walrus, an import alias,
-// an `except … as` or a `match` capture. A read, `return __all__`, is not one.
+// A method of `str`, as Python finds it, which changes nothing; a list, a dict
+// or a set has none of that name that does.
+const strMethod = (name) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return !name.startsWith('_') && $B.$getattr($B.builtins.str, name, null) !== null;
+};
+
+// Whether a node, of any shape, writes `__all__`: a method that changes it or
+// an item of it, `__all__[0].append("b")`, an assignment, a deletion, a loop or
+// `with` target, a walrus, an import alias, an `except … as` or a `match`
+// capture. A read, `return __all__`, is not one, nor a method of `str` on an
+// item, `__all__[0].upper()`, which a list of names holds as a string.
 const writesAll = (node) => {
     const $B = globalThis.__BRYTHON__;
 
     if (node instanceof $B.ast.Call) {
         const to = node.func;
-        return to instanceof $B.ast.Attribute && isAll(to.value) && !READS_LIST.has(to.attr);
+        if (!(to instanceof $B.ast.Attribute) || !withinAll(to.value) || READS_LIST.has(to.attr)) return false;
+        return isAll(to.value) || !strMethod(to.attr);
     }
     if (node instanceof $B.ast.Assign || node instanceof $B.ast.Delete) return node.targets.some(targetsAll);
     if (node instanceof $B.ast.AugAssign) return targetsAll(node.target);
@@ -74,9 +88,9 @@ const writesAll = (node) => {
 // Every place the source writes `__all__`, and every read that hands the list
 // on, `escapes`, where what is done to it next is out of sight. A list of
 // strings alone hands on its items and a copy of them as they are, `deep`
-// subscripts in (`handsOnItems`): one, unless a statement made it hold
-// anything else.
-function allWrites(ast, builtin = () => false, deep = Infinity) {
+// subscripts in (`handsOnItems`), which `deepAt` says where the read stands:
+// one, unless a statement made it hold anything else.
+function allWrites(ast, builtin = () => false, deepAt = () => Infinity) {
     const $B = globalThis.__BRYTHON__;
     const found = [];
 
@@ -87,14 +101,16 @@ function allWrites(ast, builtin = () => false, deep = Infinity) {
 
     walkScoped(ast.body, (node, scope, line, parent, grand) => {
         if (writesAll(node)) found.push({ node, scope, line });
-        // A method that hands the items on, `copy`, as a slice does.
-        const itemsOut = ITEMS_OUT.has(methodOn(parent, grand)) && subscripts(node) + 1 < deep;
+        if (!((isAll(node) && node.ctx instanceof $B.ast.Load) || item(node))) return;
 
-        if (
-            ((isAll(node) && node.ctx instanceof $B.ast.Load) || item(node)) &&
-            (itemsOut || (!keepsValue(parent, grand, node, (name) => builtin(name, scope)) && !handsOnItems(parent, node, deep, deep - 1)))
-        ) {
-            found.push({ node, scope, line, escapes: true });
+        const isBuiltin = (name) => builtin(name, scope);
+        const deep = deepAt(node, scope);
+        // A read that hands the items on, in a copy, `list(__all__)`, or one by
+        // one, `for name in __all__`, as a slice does.
+        const itemsOut = handsOutItems(parent, grand, node, isBuiltin) && subscripts(node) + 1 < deep;
+
+        if (itemsOut || (!keepsValue(parent, grand, node, isBuiltin) && !handsOnItems(parent, node, deep, deep - 1))) {
+            found.push({ node, scope, line, escapes: true, deep });
         }
     });
 
@@ -199,7 +215,7 @@ function runStatements(src, statements) {
     const text = (one) => typeof one === 'string' || one instanceof String;
     // Whether `__all__` held strings alone after each statement: none, a
     // string, or a list or a tuple of them.
-    let strings = true;
+    const strings = [];
 
     $B.namespace = (requested) => (requested === name ? namespace : original(requested));
     try {
@@ -217,11 +233,12 @@ function runStatements(src, statements) {
 
             const value = namespace.__all__;
 
-            strings &&=
+            strings.push(
                 value === undefined ||
-                value === $B.builtins.None ||
-                text(value) ||
-                (($B.is_list(value) || $B.is_tuple(value)) && [...value].every(text));
+                    value === $B.builtins.None ||
+                    text(value) ||
+                    (($B.is_list(value) || $B.is_tuple(value)) && [...value].every(text))
+            );
         }
     } finally {
         $B.namespace = original;
@@ -289,12 +306,18 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
     }
 
     // How deep in `__all__` a read hands on nothing that can change.
-    let deep = Infinity;
+    let deepAt = () => Infinity;
 
     if (run.length) {
         const { namespace, statement, raised, strings } = runStatements(src, run);
+        const precedes = (one, node) => one.lineno < node.lineno || (one.lineno === node.lineno && one.col_offset < node.col_offset);
+        const last = (node) => strings.findLast((_, index) => precedes(run[index], node)) ?? true;
+        const from = (node) => last(node) && strings.every((one, index) => one || precedes(run[index], node));
 
-        if (strings) deep = 1;
+        // One where it holds strings alone: at the top of the module, as the
+        // statements before the read left it, and in a function, called at any
+        // time once defined, as each statement from its definition on does.
+        deepAt = (node, scope) => ((scope === null ? last(node) : from(scope)) ? 1 : Infinity);
 
         // Python raises there, at import: the module never runs past it.
         if (raised !== undefined) {
@@ -342,7 +365,7 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
     // or rebound by a loop, an import or a walrus.
-    for (const { node, scope, line: at, escapes } of allWrites(ast, builtin, deep)) {
+    for (const { node, scope, line: at, escapes, deep } of allWrites(ast, builtin, deepAt)) {
         if (handled.has(node)) continue;
 
         const block = scope === null ? null : table.blockOf(scope);
@@ -351,11 +374,13 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
         // A read that hands the list on matters only for a module that has one.
         if (escapes && names === null) continue;
 
+        // A copy shares the items, which are strings only where the list holds
+        // nothing else.
+        const copied = deep === Infinity ? ', and a copy would share what it holds, which is more than strings' : '; `list(__all__)` is a copy';
+
         refuseUnreadable(
             { lineno: at },
-            escapes
-                ? 'handed on where this file cannot follow what is done to it; `list(__all__)` is a copy'
-                : 'changed where this file cannot follow it'
+            escapes ? `handed on where this file cannot follow what is done to it${copied}` : 'changed where this file cannot follow it'
         );
     }
 

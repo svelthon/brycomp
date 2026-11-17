@@ -87,6 +87,28 @@ test('a list read off the list is handed on as the list is', () => {
     expect(exported('def a(): pass\n__all__ = ["a"]\nprint(__all__[0])\n').names).toEqual(['a']);
 });
 
+// And a list inside the list, changed in place where it stands, changes what
+// the list ends with: run as Python runs it, where the analysis left it out and
+// exported `["a"]` of a module that ends with `["a", "b"]`.
+test('a change to a list inside the list is run as Python runs it', () => {
+    const nested = (change) => `def a(): pass\ndef b(): pass\n__all__ = [["a"]]\n${change}\n__all__ = __all__[0]\n`;
+
+    for (const change of ['__all__[0].append("b")', '__all__[0].extend(["b"])', '__all__[0].insert(1, "b")', '__all__[0][1:] = ["b"]', '__all__[0] += ["b"]']) {
+        expect(exported(nested(change)).names).toEqual(['a', 'b']);
+    }
+    expect(exported(nested('__all__[0].count("a")')).names).toEqual(['a']);
+    expect(exported('def a(): pass\ndef b(): pass\n__all__ = [["a", "b"]]\ndel __all__[0][1]\n__all__ = __all__[0]\n').names).toEqual(['a']);
+});
+
+// The name a list of names holds there, as a string, which changes nothing.
+test('a method of str on an item of the list is a read', () => {
+    const reads = ['print(__all__[0].upper())', 'def f():\n    return __all__[0].upper()', 'class C:\n    NAME = __all__[0].title()', 'if True:\n    print(__all__[-1].endswith("b"))'];
+
+    for (const read of reads) {
+        expect(exported(`def a(): pass\ndef b(): pass\n__all__ = ["a", "b"]\n${read}\n`).names).toEqual(['a', 'b']);
+    }
+});
+
 // A list that only ever held strings hands on its items, and a copy of them,
 // as they are; one a statement made hold a list does not.
 test('an item, a slice or an unpacking of a list of strings is no hand-off', () => {
@@ -99,6 +121,28 @@ test('an item, a slice or an unpacking of a list of strings is no hand-off', () 
         );
     }
     expect(() => exported('def a(): pass\n__all__ = ["a"]\nx = __all__\n')).toThrow(/is handed on where/);
+});
+
+// What a copy holds or a loop takes is the list's own items: a list inside it
+// is changed through them. A read stands where the list holds strings alone, or
+// not: at the top of the module, after the statements before it, and in a
+// function, after every statement from its definition on.
+test('a copy or a loop that takes the items of a list holding a list is a hand-off', () => {
+    const nested = (change) => `def a(): pass\ndef b(): pass\n__all__ = [["a"]]\n${change}\n__all__ = __all__[0]\n`;
+    const reads = [
+        'list(__all__)[0]', 'tuple(__all__)[0]', 'sorted(__all__)[0]', '[*__all__][0]', 'next(iter(__all__))', 'next(reversed(__all__))',
+        'next(enumerate(__all__))[1]', 'next(zip(__all__))[0]', 'min(__all__)', 'max(__all__)', '(__all__ + [])[0]', 'next(x for x in __all__)'
+    ];
+
+    for (const read of reads) {
+        expect(() => exported(nested(`${read}.append("b")`))).toThrow(
+            /^host — `__all__` is handed on where this file cannot follow what is done to it, and a copy would share what it holds, which is more than strings/
+        );
+        expect(exported(`def a(): pass\ndef b(): pass\n__all__ = ["a", "b"]\nx = ${read}\n`).names).toEqual(['a', 'b']);
+    }
+    expect(() => exported(nested('for x in __all__:\n    x.append("b")'))).toThrow(/is handed on where/);
+    expect(() => exported(`def f():\n    return list(__all__)\n${nested('')}`)).toThrow(/is handed on where/);
+    expect(exported(`${nested('')}for name in __all__:\n    print(name)\ndef f():\n    return list(__all__)\n`).names).toEqual(['a']);
 });
 
 // A JavaScript import spelled like a builtin that only reads is the import, not

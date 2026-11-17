@@ -188,6 +188,33 @@ const methodOn = (parent, grand) => {
     return parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent ? parent.attr : null;
 };
 
+// The builtins of `READS_ONLY` whose answer holds the items of what they read,
+// or is one: `list(__all__)[0]` is the list `__all__[0]` is. A set holds only
+// what hashes, which nothing a statement can make changes.
+const ITEMS_IN = new Set(['list', 'tuple', 'sorted', 'iter', 'enumerate', 'reversed', 'zip', 'min', 'max', 'sum']);
+
+// Whether a read `keepsValue` keeps hands on its items as they are: a method of
+// `ITEMS_OUT`, a builtin of `ITEMS_IN`, an unpacking, `[*__all__]`, a
+// concatenation, `__all__ + []`, or a loop that takes them one by one.
+const handsOutItems = (parent, grand, node, builtin) => {
+    const $B = globalThis.__BRYTHON__;
+    const joins = [$B.ast.Add, $B.ast.Mult, $B.ast.BitOr];
+
+    return (
+        ITEMS_OUT.has(methodOn(parent, grand)) ||
+        parent instanceof $B.ast.Starred ||
+        (parent instanceof $B.ast.BinOp && joins.some((op) => parent.op instanceof op)) ||
+        ((parent instanceof $B.ast.For || parent instanceof $B.ast.AsyncFor || parent instanceof $B.ast.comprehension) &&
+            parent.iter === node) ||
+        (COMPREHENSIONS.some((one) => parent instanceof $B.ast[one]) && parent.generators[0].iter === node) ||
+        (parent instanceof $B.ast.Call &&
+            parent.func instanceof $B.ast.Name &&
+            ITEMS_IN.has(parent.func.id) &&
+            builtin(parent.func.id) &&
+            parent.args.includes(node))
+    );
+};
+
 // Whether a read of such a value hands on only strings, or a copy of them, which
 // nothing of it changes through: an item or a slice `deep` subscripts in or
 // deeper, `__js__["m"][0]` or `__js__["m"][:]`, or an unpacking `unpacked`
@@ -262,5 +289,6 @@ export {
     ITEMS_OUT,
     subscripts,
     methodOn,
+    handsOutItems,
     globalReads
 };
