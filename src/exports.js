@@ -86,10 +86,10 @@ const writesAll = (node) => {
 };
 
 // Every place the source writes `__all__`, and every read that hands the list
-// on, `escapes`, where what is done to it next is out of sight. A list of
-// strings alone hands on its items and a copy of them as they are, `deep`
-// subscripts in (`handsOnItems`), which `deepAt` says where the read stands:
-// one, unless a statement made it hold anything else.
+// on, `escapes`, where what is done to it next is out of sight. What it holds
+// `deep` subscripts in and deeper, and a copy of it, is handed on as it is
+// (`handsOnItems`), which `deepAt` says where the read stands: one for a list
+// of strings, two for a list of lists of them (`deepOf`).
 function allWrites(ast, builtin = () => false, deepAt = () => Infinity) {
     const $B = globalThis.__BRYTHON__;
     const found = [];
@@ -189,9 +189,81 @@ const nodesOf = (node, into) => {
     return into;
 };
 
+// What a value holds, a list's or a tuple's items, a set's members, a dict's
+// keys and values, or null for an object the engine makes, an iterator, which
+// may hold what it was made from.
+const contents = (value) => {
+    const $B = globalThis.__BRYTHON__;
+    const type = $B.get_class(value);
+
+    if ($B.is_list(value) || $B.is_tuple(value)) return [...value];
+    if (type === $B.builtins.dict) return [...$B.builtins.dict.$iter_items(value)].flatMap(({ key, value: one }) => [key, one]);
+    if (type === $B.builtins.set || type === $B.builtins.frozenset) return [...$B.builtins.list.$factory(value)];
+    return null;
+};
+
+// A string, a number, a truth, bytes or None, which hold nothing.
+const scalar = (value) => {
+    const $B = globalThis.__BRYTHON__;
+    const { str, int, float, complex, bool, bytes, None } = $B.builtins;
+
+    return value === None || [str, int, float, complex, bool, bytes].includes($B.get_class(value));
+};
+
+// What can change in a value, the value included: a list, a dict, a set, an
+// object the engine makes, and what each holds. A tuple or a frozenset cannot,
+// though it may hold what can.
+function changeable(value, into = new Set()) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (scalar(value) || into.has(value)) return into;
+    if (!$B.is_tuple(value) && $B.get_class(value) !== $B.builtins.frozenset) into.add(value);
+    for (const one of contents(value) ?? []) changeable(one, into);
+    return into;
+}
+
+// How deep in a value a read hands on nothing that can change: one past the
+// deepest list, dict or set it holds, itself included, none for a string, a
+// number or a tuple of them; past any depth for an object the engine makes
+// and a value that holds itself. `[["a"]]` is 2: a copy of `__all__[0]` holds
+// strings.
+function deepOf(value, path = new Set()) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (value === undefined || scalar(value)) return 0;
+    if (path.has(value)) return Infinity;
+
+    const held = contents(value);
+
+    if (held === null) return Infinity;
+    path.add(value);
+
+    const below = held.reduce((most, one) => Math.max(most, deepOf(one, path)), 0);
+
+    path.delete(value);
+    if (below > 0) return below + 1;
+    return $B.is_tuple(value) || $B.get_class(value) === $B.builtins.frozenset ? 0 : 1;
+}
+
+// Whether a value is, or holds at any depth, one of `parts`; an object the
+// engine makes is taken to.
+function holds(value, parts, seen = new Set()) {
+    if (parts.has(value)) return true;
+    if (scalar(value) || seen.has(value)) return false;
+    seen.add(value);
+
+    const held = contents(value);
+
+    return held === null || held.some((one) => holds(one, parts, seen));
+}
+
 // Runs statements as Python runs them, one by one in a namespace of their own,
-// and hands back that namespace, or the statement Python raised at with what it
-// raised. Each statement is taken from a parse of its own of the same source:
+// and hands back that namespace with how deep `__all__` was after each
+// (`deeps`), or the statement Python raised at with what it raised, or the one
+// that bound another name to what can change in `__all__`
+// (`handed`): `last = __all__.pop()` binds a string, but the list itself, or
+// a list it holds, is changed through that name where nothing follows it.
+// Each statement is taken from a parse of its own of the same source:
 // the module's tree carries the marks its symbol table reads, and a second table
 // over it would overwrite them.
 //
@@ -212,10 +284,9 @@ function runStatements(src, statements) {
     const namespace = {};
     const original = $B.namespace;
     const counter = $B.id_counter(counterStart(name));
-    const text = (one) => typeof one === 'string' || one instanceof String;
-    // Whether `__all__` held strings alone after each statement: none, a
-    // string, or a list or a tuple of them.
-    const strings = [];
+    // How deep in `__all__` a read handed on nothing that can change, after each
+    // statement (`deepOf`).
+    const deeps = [];
 
     $B.namespace = (requested) => (requested === name ? namespace : original(requested));
     try {
@@ -233,19 +304,21 @@ function runStatements(src, statements) {
 
             const value = namespace.__all__;
 
-            strings.push(
-                value === undefined ||
-                    value === $B.builtins.None ||
-                    text(value) ||
-                    (($B.is_list(value) || $B.is_tuple(value)) && [...value].every(text))
-            );
+            deeps.push(deepOf(value));
+
+            const target = statement instanceof $B.ast.Assign ? statement.targets[0] : statement instanceof $B.ast.AnnAssign ? statement.target : null;
+            const parts = changeable(value);
+
+            if (target instanceof $B.ast.Name && target.id !== '__all__' && parts.size > 0 && holds(namespace[target.id], parts)) {
+                return { namespace, statement, handed: target.id };
+            }
         }
     } finally {
         $B.namespace = original;
         $B.id_counter(counter);
     }
 
-    return { namespace, strings };
+    return { namespace, deeps };
 }
 
 // What comes back is the list and the line of the statement that last set it,
@@ -309,15 +382,15 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
     let deepAt = () => Infinity;
 
     if (run.length) {
-        const { namespace, statement, raised, strings } = runStatements(src, run);
+        const { namespace, statement, raised, handed, deeps } = runStatements(src, run);
         const precedes = (one, node) => one.lineno < node.lineno || (one.lineno === node.lineno && one.col_offset < node.col_offset);
-        const last = (node) => strings.findLast((_, index) => precedes(run[index], node)) ?? true;
-        const from = (node) => last(node) && strings.every((one, index) => one || precedes(run[index], node));
+        const last = (node) => deeps.findLast((_, index) => precedes(run[index], node)) ?? 0;
+        const from = (node) => deeps.reduce((most, one, index) => (precedes(run[index], node) ? most : Math.max(most, one)), last(node));
 
-        // One where it holds strings alone: at the top of the module, as the
-        // statements before the read left it, and in a function, called at any
-        // time once defined, as each statement from its definition on does.
-        deepAt = (node, scope) => ((scope === null ? last(node) : from(scope)) ? 1 : Infinity);
+        // At the top of the module, as the statements before the read left
+        // it, and in a function, called at any time once defined, as the
+        // deepest of the statements from its definition on.
+        deepAt = (node, scope) => (scope === null ? last(node) : from(scope));
 
         // Python raises there, at import: the module never runs past it.
         if (raised !== undefined) {
@@ -330,6 +403,7 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
                 at
             );
         }
+        if (handed !== undefined) refuseUnreadable(statement, `handed on to \`${handed}\`, where this file cannot follow what is done to it`);
 
         // A list or a tuple is the export list. Anything else, a string or
         // `None`, or no `__all__` at all once `del` has run, is no export
@@ -376,7 +450,7 @@ function declaredExports(host, ast, table, source, lineOffset = 0, src = '') {
 
         // A copy shares the items, which are strings only where the list holds
         // nothing else.
-        const copied = deep === Infinity ? ', and a copy would share what it holds, which is more than strings' : '; `list(__all__)` is a copy';
+        const copied = deep > 1 ? ', and a copy would share what it holds, which is more than strings' : '; `list(__all__)` is a copy';
 
         refuseUnreadable(
             { lineno: at },

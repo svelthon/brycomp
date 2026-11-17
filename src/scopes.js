@@ -144,7 +144,8 @@ const READS_ONLY = new Set([
 // static reading follows. `builtin(name)` says whether the name is the builtin
 // there, and not a function of the author's that took its name. A method
 // called on it keeps it only where the compiler runs the statement (`methods`):
-// `__all__`'s, not `__js__`'s.
+// `__all__`'s, not `__js__`'s. A method of a string written out,
+// `", ".join(__all__)`, reads what it is given and keeps nothing of it.
 const keepsValue = (parent, grand, node, builtin, methods = true) => {
     const $B = globalThis.__BRYTHON__;
 
@@ -163,6 +164,12 @@ const keepsValue = (parent, grand, node, builtin, methods = true) => {
             parent.func instanceof $B.ast.Name &&
             READS_ONLY.has(parent.func.id) &&
             builtin(parent.func.id) &&
+            parent.args.includes(node)) ||
+        (parent instanceof $B.ast.Call &&
+            parent.func instanceof $B.ast.Attribute &&
+            parent.func.value instanceof $B.ast.Constant &&
+            typeof parent.func.value.value === 'string' &&
+            !parent.func.attr.startsWith('_') &&
             parent.args.includes(node))
     );
 };

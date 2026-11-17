@@ -80,6 +80,25 @@ test('a list bound to a second target is refused, which a change through that na
     }
 });
 
+// A statement run for the list that binds another name hands that name what it
+// binds: the list itself, or a list it holds, is then changed through it out
+// of sight. A string, `last = __all__.pop()`, changes nothing of it.
+test('a statement run for the list that binds another name to the list, or to a list it holds, is refused', () => {
+    const bound = [
+        '__all__ = ["a"]\nY = (__all__.append("b"), __all__)[1]\nY.append("c")\n',
+        '__all__ = [["a"]] * 2\nY = __all__.pop()\nY.append("b")\n__all__ = __all__[0]\n',
+        '__all__ = [{"k": ["a"]}]\nY = __all__[0].get("k")\nY.append("b")\n__all__ = __all__[0]["k"]\n'
+    ];
+
+    for (const src of bound) {
+        expect(() => exported(`def a(): pass\ndef b(): pass\n${src}`)).toThrow(
+            /^host — `__all__` is handed on to `Y`, where this file cannot follow what is done to it/
+        );
+    }
+    expect(exported('def a(): pass\ndef b(): pass\n__all__ = ["a", "b"]\nlast = __all__.pop()\n').names).toEqual(['a']);
+    expect(exported('def a(): pass\ndef b(): pass\n__all__ = [["a"], ["b"]]\nY = __all__.pop()\n__all__ = __all__[0]\n').names).toEqual(['a']);
+});
+
 test('a list read off the list is handed on as the list is', () => {
     expect(() =>
         exported('def a(): pass\ndef b(): pass\n__all__ = [["a"]]\nalias = __all__[0]\nalias.append("b")\n__all__ = __all__[0]\n')
@@ -123,6 +142,15 @@ test('an item, a slice or an unpacking of a list of strings is no hand-off', () 
     expect(() => exported('def a(): pass\n__all__ = ["a"]\nx = __all__\n')).toThrow(/is handed on where/);
 });
 
+// A method of a string written out reads what it is given; one of a name may
+// be anything's.
+test('the list handed to a method of a string written out is read', () => {
+    for (const read of ['x = ", ".join(__all__)', 'def f():\n    return "\\n".join(__all__)', 'print("{}".format(__all__))']) {
+        expect(exported(`def a(): pass\n__all__ = ["a"]\n${read}\n`).names).toEqual(['a']);
+    }
+    expect(() => exported('def a(): pass\n__all__ = ["a"]\nsep = ", "\nx = sep.join(__all__)\n')).toThrow(/is handed on where/);
+});
+
 // What a copy holds or a loop takes is the list's own items: a list inside it
 // is changed through them. A read stands where the list holds strings alone, or
 // not: at the top of the module, after the statements before it, and in a
@@ -143,6 +171,22 @@ test('a copy or a loop that takes the items of a list holding a list is a hand-o
     expect(() => exported(nested('for x in __all__:\n    x.append("b")'))).toThrow(/is handed on where/);
     expect(() => exported(`def f():\n    return list(__all__)\n${nested('')}`)).toThrow(/is handed on where/);
     expect(exported(`${nested('')}for name in __all__:\n    print(name)\ndef f():\n    return list(__all__)\n`).names).toEqual(['a']);
+});
+
+// A copy one level further in holds what that level holds: of a list inside
+// the list, strings, which nothing changes. The list itself is still handed
+// on, and so is a copy of a list holding a list in turn.
+test('a copy of a list of strings inside the list is no hand-off, the list itself is', () => {
+    const nested = (read) => `def a(): pass\ndef b(): pass\n__all__ = [["a"]]\n${read}\n__all__ = __all__[0]\n`;
+
+    for (const read of ['alias = list(__all__[0])', 'alias = __all__[0].copy()', 'alias = __all__[0][:]', 'first, *rest = __all__[0]']) {
+        expect(exported(nested(read)).names).toEqual(['a']);
+    }
+    expect(() => exported(nested('alias = __all__[0]'))).toThrow(/is handed on where/);
+    expect(() => exported('def a(): pass\n__all__ = [[["a"]]]\nalias = list(__all__[0])\n__all__ = __all__[0][0]\n')).toThrow(
+        /is handed on where this file cannot follow what is done to it, and a copy would share what it holds/
+    );
+    expect(exported('def a(): pass\n__all__ = ("a",)\nalias = __all__\n').names).toEqual(['a']);
 });
 
 // A JavaScript import spelled like a builtin that only reads is the import, not

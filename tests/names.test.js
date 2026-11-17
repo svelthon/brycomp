@@ -103,7 +103,9 @@ test('`__js__` handed to a JavaScript import spelled like a builtin is refused, 
 // Its lists hold strings alone: one of them, a copy of a list, the items an
 // unpacking takes, handed on, change nothing of it.
 test('a string of `__js__`, a copy of a list of it, and an unpacking of one are handed on', () => {
-    for (const read of ['x = __js__["./a.js"][0]', 'x = __js__["./a.js"][:]', 'first, = __js__["./a.js"]', 'first, *rest = __js__["./a.js"]', 'key, = __js__']) {
+    const reads = ['x = __js__["./a.js"][0]', 'x = __js__["./a.js"][:]', 'first, = __js__["./a.js"]', 'first, *rest = __js__["./a.js"]', 'key, = __js__', 'x = ", ".join(__js__["./a.js"])'];
+
+    for (const read of reads) {
         expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
     }
     expect(() => bryc.compile(host, '__js__ = {"./a.js": ["kept"]}\nx, = [__js__["./a.js"]]\n', { name: 'a', source })).toThrow(
