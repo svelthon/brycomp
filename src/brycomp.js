@@ -146,4 +146,4 @@ export {
 } from './exports.js';
 
 // The JavaScript a source imports, and the names JavaScript gives the module.
-export { continuedLines, declaredJsImports, takeImportJs, jsImportLine, jsNameBindings } from './imports.js';
+export { continuedLines, declaredJsImports, takeImportJs, jsImportLine, jsLocal, jsNameBindings } from './imports.js';
