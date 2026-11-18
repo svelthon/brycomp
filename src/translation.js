@@ -325,15 +325,18 @@ const stateCell = (host, name, cell) => host.state.cell(name, cell, bump(name));
 // `track` the host's function that tracks a value written and gives what the
 // name keeps of it, in place of the runtime's own, for a state the host makes
 // its own copy of, as Svelte's `$state` makes a proxy of an array: the same
-// call, where a longer setter cost every write of the name.
+// call, where a longer setter cost every write of the name; `read` the host's
+// function that gives what Python reads of what the cell holds, for a state
+// that keeps a value as it was handed until Python reads it.
 //
 // A write the host refuses, before it stores the value as Svelte's state
 // refuses one, leaves the name followed as it was: `track` had moved what its
 // readers follow onto the value refused, while the cell kept the one before,
 // whose changes then told nobody.
-function stateBinding(host, name, cell, { subs = null, held = null, track = host.runtime.track } = {}) {
+function stateBinding(host, name, cell, { subs = null, held = null, track = host.runtime.track, read = null } = {}) {
     const { bind, SHAPING, followOwn, changesNothing } = host.runtime;
     const tracked = (value) => `${track}(${value}, ${bump(name)}${subs === null ? '' : `, ${subs}`})`;
+    const readOf = (value) => (read === null ? value : `${read}(${value}, ${bump(name)})`);
     const write =
         `const __was = ${bump(name)}.held;` +
         ` try { const __written = ${tracked(NEXT_VALUE)};` +
@@ -341,7 +344,7 @@ function stateBinding(host, name, cell, { subs = null, held = null, track = host
         ` catch (__refused) { ${tracked('__was')}; throw __refused; }`;
 
     return (
-        `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${host.state.value(cell, name)}) : ${host.state.read(name, cell)}), ` +
+        `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${readOf(host.state.value(cell, name))}) : ${readOf(host.state.read(name, cell))}), ` +
         `(${NEXT_VALUE}) => { ${write} }${held === null ? '' : `, () => ${held}`});`
     );
 }

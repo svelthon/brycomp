@@ -470,6 +470,25 @@ test("a write keeps what the host's own track gives of the value", () => {
     expect(line).toContain('catch (__refused) { ownTrack(__was, __bump_rows); throw __refused; }');
 });
 
+// And Python reads what the host's `read` gives of what the cell holds, on
+// either branch, told the name's bump.
+test("a read is what the host's own read gives of the cell", () => {
+    const line = bryc.stateBinding(host, 'rows', '__ref_rows', { read: 'ownRead' });
+    const cell = { value: 'kept' };
+    const bump = { held: 'kept' };
+    const accessors = {};
+    const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
+    const shaping = { on: false };
+
+    new Function(bryc.PROTO, '__ref_rows', '__bump_rows', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', 'ownRead', line)(
+        {}, cell, bump, bind, shaping, (one) => `followed ${one}`, (one) => one, (one, other) => one === other, (one, moved) => `${one} as read by ${moved === bump}`
+    );
+    const read = accessors.get();
+    shaping.on = true;
+
+    expect([read, accessors.get()]).toEqual(['kept as read by true', 'followed kept as read by true']);
+});
+
 // **A component's Python is its script, dedented, with the template's
 // functions after it**, as the host hands them: the block an author indents
 // inside the markup is taken back to column zero as Brython takes a `<script
