@@ -450,6 +450,26 @@ test("an instance signs its containers onto its own list, and a function's acces
     expect(line.endsWith(' }, () => __fn_go);')).toBe(true);
 });
 
+// A state the host makes its own copy of is tracked by the host's function,
+// which gives what the name keeps of the value written: the cell holds that
+// copy, and a refused write is put back through it.
+test("a write keeps what the host's own track gives of the value", () => {
+    const line = bryc.stateBinding(host, 'rows', '__ref_rows', { track: 'ownTrack' });
+    const cell = { value: undefined };
+    const bump = { held: undefined };
+    const ownTrack = (value, moved) => ((moved.held = Array.isArray(value) ? { copy: [...value] } : value), moved.held);
+    const accessors = {};
+    const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
+
+    new Function(bryc.PROTO, '__ref_rows', '__bump_rows', 'bind', 'SHAPING', 'followOwn', 'ownTrack', 'changesNothing', line)(
+        {}, cell, bump, bind, { on: false }, (one) => one, ownTrack, (one, other) => one === other
+    );
+    accessors.set(['a']);
+
+    expect([cell.value, bump.held === cell.value]).toEqual([{ copy: ['a'] }, true]);
+    expect(line).toContain('catch (__refused) { ownTrack(__was, __bump_rows); throw __refused; }');
+});
+
 // **A component's Python is its script, dedented, with the template's
 // functions after it**, as the host hands them: the block an author indents
 // inside the markup is taken back to column zero as Brython takes a `<script
