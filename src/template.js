@@ -299,11 +299,12 @@ function templateDots(host, def) {
 // means, a dot that reads a key among it, is the host's to have written.
 //
 // `ranges` says where each template function lands in the Python source, as
-// `[from, to, line, column]`, with the file line and column of the markup it
-// stands for: an error raised inside one, or inside a lambda it made, is
-// reported there rather than at a line of the script that happens to share its
-// number. `templateLine` is where the first one starts.
-function componentSource(text, defs, lines = [], columns = []) {
+// `[from, to, line, column, text]`, with the file line and column of the
+// markup it stands for and the expression as written: an error raised inside
+// one, or inside a lambda it made, is reported there rather than at a line of
+// the script that happens to share its number. `templateLine` is where the
+// first one starts.
+function componentSource(text, defs, lines = [], columns = [], texts = []) {
     const body = engine().unindent(text);
     const ranges = [];
     let templateLine;
@@ -314,7 +315,7 @@ function componentSource(text, defs, lines = [], columns = []) {
     defs.forEach((def, index) => {
         const to = from + def.split('\n').length - 1;
 
-        if (lines[index] !== undefined) ranges.push([from, to, lines[index], columns[index]]);
+        if (lines[index] !== undefined) ranges.push([from, to, lines[index], columns[index], texts[index]]);
 
         from = to + 2;
     });

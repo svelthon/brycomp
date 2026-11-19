@@ -499,17 +499,18 @@ const component = (text, more) => bryc.compile(host, text, { name: 'Probe', sour
 
 test('the script dedented, the functions after it as written, each where its markup stands', () => {
     const defs = ['def __expr_0(row):\n    return __text(row.name)', 'def __expr_1():\n    return __text(1)'];
-    const { src, ranges, templateLine } = component('    x = 1\n\n    y = 2', { defs, defLines: [12, 14], defColumns: [4, 0] });
+    const { src, ranges, templateLine } = component('    x = 1\n\n    y = 2', { defs, defLines: [12, 14], defColumns: [4, 0], defTexts: ['row.name', '1'] });
 
     expect(src).toBe(
         'x = 1\n\ny = 2\n' +
             'def __expr_0(row):\n    return __text(row.name)\n\n' +
             'def __expr_1():\n    return __text(1)\n'
     );
-    // Python lines 4 to 5 and 7 to 8, the markup's line 12, column 4, and 14.
+    // Python lines 4 to 5 and 7 to 8, the markup's line 12, column 4, and 14,
+    // and each expression as written.
     expect(ranges).toEqual([
-        [4, 5, 12, 4],
-        [7, 8, 14, 0]
+        [4, 5, 12, 4, 'row.name'],
+        [7, 8, 14, 0, '1']
     ]);
     expect(templateLine).toBe(4);
 });

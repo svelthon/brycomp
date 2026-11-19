@@ -142,15 +142,20 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
             where = column === undefined ? `${source}:${at}` : `${source}:${at}:${column + 1}`;
 
             if (range !== undefined) {
-                // The author's text, out of the wrapper the template's pass
-                // put around it: `__text(…)`, `__truthy(…)`.
-                const written = src
-                    .split('\n')
-                    .slice(range[0], range[1])
-                    .join(' ')
-                    .trim()
-                    .replace(/^return\s+/, '')
-                    .replace(/^__\w+\(([\s\S]*)\)$/, '$1');
+                // The author's text, as the host hands it (`componentSource`):
+                // read back out of the function the template's pass wrote, it
+                // kept the pair the pass holds it in, and `{#if a = 5}` was
+                // quoted `(a = 5)`. Else out of the wrapper the pass put around
+                // it, `__text(…)`, `__truthy(…)`.
+                const written =
+                    range[4] ??
+                    src
+                        .split('\n')
+                        .slice(range[0], range[1])
+                        .join(' ')
+                        .trim()
+                        .replace(/^return\s+/, '')
+                        .replace(/^__\w+\(([\s\S]*)\)$/, '$1');
                 const said = habitsIn(written);
                 quoted =
                     `\n  in the template expression \`${written}\`,` +

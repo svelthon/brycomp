@@ -22,7 +22,8 @@ import { pythonName } from './expressions.js';
 
 // `text` is the script as its author wrote it, and for a component `defs`,
 // `defLines` and `defColumns` the functions its template compiled to, with
-// where in the file each stands (`componentSource`). `named` is the module
+// where in the file each stands and `defTexts` the expression each holds as
+// written (`componentSource`). `named` is the module
 // Python imports it by, null for a component, which nobody imports. `jsNames`
 // are the names JavaScript beside it gives the module. `resolves` answers
 // whether an imported name is one of the project's files, and without it the
@@ -44,6 +45,7 @@ export function compile(
         defs = [],
         defLines = [],
         defColumns = [],
+        defTexts = [],
         lineOffset = 0,
         jsNames = [],
         resolves = null,
@@ -57,7 +59,7 @@ export function compile(
     let ranges = [];
     let templateLine;
 
-    if (component) ({ src, ranges, templateLine } = componentSource(src, defs, defLines, defColumns));
+    if (component) ({ src, ranges, templateLine } = componentSource(src, defs, defLines, defColumns, defTexts));
 
     // Neither `importjs` nor the host's own syntax is Python, and Brython would
     // rightly refuse them: both are rewritten before the translation, the host's
