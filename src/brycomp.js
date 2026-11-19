@@ -60,8 +60,9 @@
 //            the folders it lists.
 //   rewrite  optional: the host's own syntax made Python, before the
 //            translation, `rewrite(text, { source, lineOffset, component,
-//            bound })` answering the text, `bound` the names `importjs`
-//            binds. A host with no syntax of its own leaves it out.
+//            bound, jsNames })` answering the text, `bound` the names
+//            `importjs` binds and `jsNames` those JavaScript gives the module
+//            beside it. A host with no syntax of its own leaves it out.
 //   translate
 //            optional: the text the JavaScript is compiled from, when the host
 //            has it read other words than the author's at places the analysis

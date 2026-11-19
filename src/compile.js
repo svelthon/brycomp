@@ -65,7 +65,7 @@ export function compile(
     const lifted = takeImportJs(host, src, source, lineOffset, component);
     const bound = new Set(lifted.imports.flatMap((one) => one.entries.map((entry) => entry.local)));
 
-    src = host.rewrite === undefined ? lifted.source : host.rewrite(lifted.source, { source, lineOffset, component, bound });
+    src = host.rewrite === undefined ? lifted.source : host.rewrite(lifted.source, { source, lineOffset, component, bound, jsNames });
 
     const translating = { name, source, named, lineOffset, authored, ranges, src };
     const root = compilePython(host, src, translating);
