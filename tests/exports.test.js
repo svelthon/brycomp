@@ -151,6 +151,21 @@ test('the list handed to a method of a string written out is read', () => {
     expect(() => exported('def a(): pass\n__all__ = ["a"]\nsep = ", "\nx = sep.join(__all__)\n')).toThrow(/is handed on where/);
 });
 
+// An operator hands the list to its other operand's method, which an author's
+// object may keep it in: `holder + __all__` calls its `__add__`, `__all__ +
+// holder` its `__radd__`, `__all__ == holder` its `__eq__`. A constant or a
+// display keeps nothing, nor does `is`, nor `in` looking among the list's items.
+test('the list an operator hands to an operand of the author’s is handed on, to a constant it is read', () => {
+    const module = (read) => `def a(): pass\nholder = []\n__all__ = ["a"]\n${read}\n`;
+
+    for (const read of ['x = holder + __all__', 'x = __all__ + holder', 'x = __all__ == holder', 'x = 1 < holder < __all__', 'x = __all__ in holder']) {
+        expect(() => exported(module(read))).toThrow(/is handed on where/);
+    }
+    for (const read of ['x = __all__ + ["b"]', 'x = (holder,) + __all__', 'x = __all__ == ["a"]', 'x = "a" in __all__', 'x = holder in __all__', 'x = __all__ is holder', 'x = "%s" % __all__']) {
+        expect(exported(module(read)).names).toEqual(['a']);
+    }
+});
+
 // What a copy holds or a loop takes is the list's own items: a list inside it
 // is changed through them. A read stands where the list holds strings alone, or
 // not: at the top of the module, after the statements before it, and in a

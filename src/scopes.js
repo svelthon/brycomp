@@ -138,6 +138,54 @@ const READS_ONLY = new Set([
     'str', 'repr', 'print', 'any', 'all', 'min', 'max', 'sum', 'zip'
 ]);
 
+// An operand whose operator keeps nothing of the value it meets: a constant,
+// or a display, whose operators are a builtin type's (`displayed`). Compared,
+// what a display holds is compared too, so it holds constants alone
+// (`constant`). An author's object may keep it: `holder + __all__` calls its
+// `__add__`, `__all__ + holder` its `__radd__`, `__all__ == holder` its `__eq__`.
+const DISPLAYS = ['List', 'Tuple', 'Set'];
+
+const constant = (node) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return (
+        node instanceof $B.ast.Constant ||
+        (DISPLAYS.some((one) => node instanceof $B.ast[one]) && node.elts.every(constant)) ||
+        (node instanceof $B.ast.Dict && node.keys.every((key) => key !== null && constant(key)) && node.values.every(constant))
+    );
+};
+
+const displayed = (node) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return [...DISPLAYS, 'Dict', 'Constant', 'JoinedStr'].some((one) => node instanceof $B.ast[one]);
+};
+
+// Whether an operator keeps the value where the compiler sees it: its other
+// operand keeps nothing of it, or nothing of the other is called, `is`, and
+// `name in __all__`, the list looking among its own items.
+const keptByOperator = (parent, node) => {
+    const $B = globalThis.__BRYTHON__;
+
+    if (parent instanceof $B.ast.BinOp) return displayed(parent.left === node ? parent.right : parent.left);
+    if (!(parent instanceof $B.ast.Compare)) return false;
+
+    const operands = [parent.left, ...parent.comparators];
+    const at = operands.indexOf(node);
+
+    return [
+        [at - 1, parent.ops[at - 1]],
+        [at + 1, parent.ops[at]]
+    ].every(
+        ([other, op]) =>
+            op === undefined ||
+            op instanceof $B.ast.Is ||
+            op instanceof $B.ast.IsNot ||
+            (other < at && (op instanceof $B.ast.In || op instanceof $B.ast.NotIn)) ||
+            constant(operands[other])
+    );
+};
+
 // Whether a read of a value the compiler reads statically, `__all__` or
 // `__js__`, keeps it where the compiler sees it. Handed on, `names = __all__`,
 // `alias = __js__["m"]` or `list.clear(__all__)`, it can be changed by what no
@@ -152,8 +200,7 @@ const keepsValue = (parent, grand, node, builtin, methods = true) => {
     return (
         (methods && parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent) ||
         (parent instanceof $B.ast.Subscript && parent.value === node && parent.ctx instanceof $B.ast.Load) ||
-        parent instanceof $B.ast.Compare ||
-        parent instanceof $B.ast.BinOp ||
+        keptByOperator(parent, node) ||
         parent instanceof $B.ast.Starred ||
         parent instanceof $B.ast.FormattedValue ||
         parent instanceof $B.ast.Expr ||
