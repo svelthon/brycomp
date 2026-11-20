@@ -601,3 +601,31 @@ test("a parameter handed late is called where a comprehension's target reads it"
 
     expect(bryc.templateDots(host, late)).toBe('def __expr_0_late(row):\n    return (0 for row()["flag"] in [1, 2])');
 });
+
+// In an `async def` as in a `def`: read as written, the parameter stayed the
+// function standing for it, and `row + 1` added an int to it. One not handed
+// late is read as it is.
+test.for([
+    ['async def __expr_0_late(row):\n    return row + 1', 'async def __expr_0_late(row):\n    return row() + 1'],
+    ['async def __expr_0_late(row):\n    return row.title', 'async def __expr_0_late(row):\n    return readAttr(row(), "title")'],
+    ['async def __expr_0(row):\n    return row + 1', 'async def __expr_0(row):\n    return row + 1']
+])('an asynchronous template function reads its parameters as handed: %s', ([written, expected]) => {
+    const reading = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
+
+    expect(bryc.templateDots(reading, written)).toBe(expected);
+});
+
+// And every target of a comprehension is local to all of it: a lambda in an
+// earlier clause that reads one captures the comprehension's, which it was
+// made to call, an int. The first iterable is read outside, where the
+// parameter is the one handed late, and so is a lambda written there.
+test.for([
+    ['[row, [capture() for _ in [0] for capture in [lambda: row] for row in [1, 2]]]', '[row(), [capture() for _ in [0] for capture in [lambda: row] for row in [1, 2]]]'],
+    ['[row, [capture() for _ in [0] for capture in [lambda: row] for row, _ in [(1, 0), (2, 0)]]]', '[row(), [capture() for _ in [0] for capture in [lambda: row] for row, _ in [(1, 0), (2, 0)]]]'],
+    ['[row, list(capture() for _ in [0] for capture in [lambda: row] for row in [1, 2])]', '[row(), list(capture() for _ in [0] for capture in [lambda: row] for row in [1, 2])]'],
+    ['[row, [capture() for capture in [lambda: row] for row in [1, 2]]]', '[row(), [capture() for capture in [lambda: row()] for row in [1, 2]]]'],
+    ['[row, [row for row in [row]]]', '[row(), [row for row in [row()]]]'],
+    ['[row, [capture() for row in [1, 2] for capture in [lambda: row]]]', '[row(), [capture() for row in [1, 2] for capture in [lambda: row]]]']
+])('a parameter handed late is the comprehension’s own where it binds it: %s', ([body, expected]) => {
+    expect(bryc.templateDots(host, `def __expr_0_late(row):\n    return ${body}`)).toBe(`def __expr_0_late(row):\n    return ${expected}`);
+});

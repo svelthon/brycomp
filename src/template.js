@@ -86,9 +86,13 @@ function templateDots(host, def) {
     // template's pass: each read of one becomes a call, except where a lambda
     // or a comprehension binds the same name for itself.
     // The write half of a binding is handed the value written first, as
-    // itself, and only the names after it so.
+    // itself, and only the names after it so. An `async def` as well: read
+    // there as written, a parameter stayed the function standing for it.
     const [def0] = tree.body;
-    const late = def0 instanceof $B.ast.FunctionDef && def0.name.startsWith(EXPR_PREFIX) && def0.name.endsWith('_late');
+    const late =
+        (def0 instanceof $B.ast.FunctionDef || def0 instanceof $B.ast.AsyncFunctionDef) &&
+        def0.name.startsWith(EXPR_PREFIX) &&
+        def0.name.endsWith('_late');
     const lazy = late
         ? new Set(def0.args.args.slice(def0.name.startsWith(`${EXPR_PREFIX}set_`) ? 1 : 0).map((one) => one.arg))
         : new Set();
@@ -119,7 +123,9 @@ function templateDots(host, def) {
     // same names. A lambda's defaults are read where the lambda is written and
     // its body where it runs, with every parameter bound, and every name a walrus
     // binds there, which is local to the whole body. A comprehension's first
-    // iterable is read outside it, and each target binds for what follows it.
+    // iterable is read outside it, and every target is local to all of it, as
+    // its scope makes them: bound only for what followed it, a target a lambda
+    // in an earlier clause captured was taken for a parameter handed late.
     const scoped = (node, shadowed) => {
         if (node instanceof $B.ast.Lambda) {
             const args = node.args;
@@ -140,7 +146,10 @@ function templateDots(host, def) {
 
         if (!comprehension) return false;
 
-        let inner = shadowed;
+        const inner = within(
+            shadowed,
+            node.generators.flatMap((one) => targets(one.target))
+        );
 
         // A target reads what it assigns into, `row` in `for row["flag"] in …`,
         // where each step assigns, inside the comprehension: read as every
@@ -149,7 +158,6 @@ function templateDots(host, def) {
         node.generators.forEach((one, index) => {
             visit(one.iter, index === 0 ? shadowed : inner);
             visit(one.target, inner);
-            inner = within(inner, targets(one.target));
             for (const test of one.ifs) visit(test, inner);
         });
 
