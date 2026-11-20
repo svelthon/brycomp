@@ -278,6 +278,37 @@ test('a module that does not ship is refused on its line, with what the host say
     expect(missing('cart', () => 'file')).not.toThrow();
 });
 
+// A reduction asked of an instance of a class a module beside it defines is
+// that class's own, `__reduce__` or `__reduce_ex__`, read by its name or off
+// the module: refused, the call compiled only once moved into the class's
+// module. `object`'s still builds its answer with `copyreg`.
+test.for([
+    'from records import Record\nresult = Record(5).__reduce__()',
+    'from records import Record\nresult = Record(5).__reduce_ex__(2)',
+    'import records\nresult = records.Record(5).__reduce__()'
+])('a reduction of an instance of a class imported from a module beside it compiles: %s', (written) => {
+    expect(() => bryc.compile(host, `${written}\n`, { name: 'a', source, resolves: () => 'file' })).not.toThrow();
+});
+
+test("object's reduction is still refused", () => {
+    expect(() => bryc.compile(host, 'result = object().__reduce__()\n', { name: 'a', source })).toThrow(/`__reduce__\(\)` builds its answer with `copyreg`/);
+});
+
+// Nor is an instance of a class of the module that may be another object, or
+// hold its own methods: one its `__new__` hands back, its decorator puts in its
+// place, its `__init__` gives the method to, or its `__getattribute__` finds it
+// for. Refused as one with `object`'s, it was another's own.
+const RECORD = 'class Record:\n    def __reduce__(self):\n        return (Record, (42,))\n';
+
+test.for([
+    ['__new__', 'class Proxy:\n    def __new__(cls): return Record()\n'],
+    ['a decorator', 'def select(cls): return Record\n@select\nclass Proxy: pass\n'],
+    ['__init__', 'class Proxy:\n    def __init__(self):\n        self.__reduce__ = lambda: (Record, (42,))\n'],
+    ['__getattribute__', 'class Proxy:\n    def __getattribute__(self, name):\n        return lambda: (Record, (42,))\n']
+])('a class whose instance may hold its own reduction, by %s, compiles', ([, proxy]) => {
+    expect(() => bryc.compile(host, `${RECORD}${proxy}result = Proxy().__reduce__()[1][0]\n`, { name: 'a', source })).not.toThrow();
+});
+
 // What the host says stands in is read among its own names: a module named like
 // a property of `Object.prototype` got the function the prototype holds there,
 // `; function Object() { [native code] }`, at the end of its refusal.

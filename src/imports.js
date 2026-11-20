@@ -702,19 +702,59 @@ function refuseLibraryCalls(host, ast, table, source, at) {
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
 
     // The names that are the builtins module, `import builtins [as b]`, by the
-    // block that binds them, and the attributes a class of the file binds
-    // itself, by a `def`, an `async def` or an assignment, whose call is the
-    // author's and needs nothing that does not ship.
+    // block that binds them; and the classes the module defines at its top, by
+    // the name they are its one binding of.
     const modules = new Map();
-    const defined = new Set();
     const blockAt = (scope) => (scope === null ? table.top : table.blockOf(scope));
     const imports = [];
+    const classes = new Map();
+    const topBindings = new Map();
+    const boundAtTop = (name) => topBindings.set(name, (topBindings.get(name) ?? 0) + 1);
     walkScoped(ast.body, (node, scope) => {
         if (node instanceof $B.ast.Import) {
             for (const one of node.names) if (one.name === 'builtins') imports.push([one.asname ?? 'builtins', scope]);
         }
-        if (node instanceof $B.ast.ClassDef) for (const name of blockBinds(table.blockOf(node))) defined.add(name);
+        if (scope !== null) return;
+        if (node instanceof $B.ast.ClassDef) classes.set(node.name, node);
+        if (node instanceof $B.ast.ClassDef || node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef) boundAtTop(node.name);
+        if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Store) boundAtTop(node.id);
+        if (node instanceof $B.ast.Import || node instanceof $B.ast.ImportFrom) {
+            for (const one of node.names) boundAtTop(one.asname ?? one.name.split('.')[0]);
+        }
     });
+
+    // Whether a call's receiver certainly holds the method only as `object`
+    // gives it, which builds its answer with `copyreg`: an instance made there
+    // of `object`, or of a class of the module that binds none of `names`, nor
+    // its bases, no metaclass besides. Any other receiver may hold its own, an
+    // instance of a class another module defines among them, and a refusal
+    // stops the program from compiling: refused, a `Record` imported from a
+    // module beside it could not be reduced. `__reduce_ex__` calls an own
+    // `__reduce__`. Nor is a class certain that may make another object than
+    // its instance, or give one its own methods: decorated, or binding, it or a
+    // base, how it is made or how an attribute is found (`MAKES`); a `__new__`
+    // handing back a `Record` was refused.
+    const MAKES = ['__new__', '__init__', '__getattribute__', '__getattr__', '__init_subclass__'];
+    const plainClass = (name, names, scope, seen) => {
+        if (name === 'object') return builtin('object', scope);
+
+        const node = classes.get(name);
+
+        if (node === undefined || seen.has(name) || node.keywords.length > 0 || node.decorator_list.length > 0 || topBindings.get(name) !== 1) return false;
+        if (scope !== null && !isGlobalScope(scopeIn(table.blockOf(scope), name))) return false;
+        seen.add(name);
+
+        const binds = blockBinds(table.blockOf(node));
+
+        return (
+            ![...names, ...MAKES].some((one) => binds.has(one)) &&
+            node.bases.every((base) => base instanceof $B.ast.Name && plainClass(base.id, names, null, seen))
+        );
+    };
+    const madePlain = (receiver, method, scope) =>
+        receiver instanceof $B.ast.Call &&
+        receiver.func instanceof $B.ast.Name &&
+        plainClass(receiver.func.id, method === '__reduce_ex__' ? ['__reduce_ex__', '__reduce__'] : ['__reduce__'], scope, new Set());
 
     // A name means the module only where the binding it reads is the import:
     // the block's own, the module's for a global, or for a free name the
@@ -863,7 +903,7 @@ function refuseLibraryCalls(host, ast, table, source, at) {
         // Each table asked for its own names: `toString` and `constructor` are
         // on their prototype, and a JavaScript object's methods besides.
         const module =
-            func instanceof $B.ast.Attribute && !defined.has(func.attr) && Object.hasOwn(IMPORTED_BY_METHOD, func.attr)
+            func instanceof $B.ast.Attribute && Object.hasOwn(IMPORTED_BY_METHOD, func.attr) && madePlain(func.value, func.attr, scope)
                 ? IMPORTED_BY_METHOD[func.attr]
                 : undefined;
         const documented =
