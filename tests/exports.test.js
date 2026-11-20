@@ -242,6 +242,33 @@ test('a list of names the module binds, declares or imports is exported as it st
     expect(checks(null, { declaration: null })).toEqual({ unbound: [], line: undefined, listedAt: 'src/a.py' });
 });
 
+// The names the module binds are those Python leaves in it: not the target of a
+// comprehension, which binds it in its own scope, but the target of a walrus in
+// one at the top of the module, and not in one of a function's.
+test.for([
+    ['rows = [entry for entry in [1, 2]]', false],
+    ['rows = {entry for entry in [1, 2]}', false],
+    ['rows = {entry: entry for entry in [1, 2]}', false],
+    ['rows = list(entry for entry in [1, 2])', false],
+    ['entry = 9\nrows = [entry for entry in [1, 2]]', true],
+    ['rows = [(entry := row) for row in [1, 2]]', true],
+    ['rows = list((entry := row) for row in [1, 2])', true],
+    ['def collect():\n    return [(entry := row) for row in [1, 2]]\ncollect()', false],
+    // And what a function writes under `global`, however it writes it.
+    ['def fill():\n    global entry\n    entry = 42\nfill()', true],
+    ['def fill():\n    global entry\n    entry, other = 42, 43\nfill()', true],
+    ['def fill():\n    global entry\n    return (entry := 42)\nfill()', true],
+    ['def fill():\n    global entry\n    for entry in [42]:\n        pass\nfill()', true],
+    ['def fill():\n    global entry\n    import builtins as entry\nfill()', true],
+    ['def fill():\n    global entry\n    def entry(): return 42\nfill()', true],
+    ['def fill():\n    global entry\nfill()', false],
+    ['def fill():\n    entry = 42\nfill()', false]
+])('`%s` binds entry in the module: %s', ([src, binds]) => {
+    const { table } = bryc.compile(host, `${src}\n`, { name: 'probe', source });
+
+    expect(bryc.moduleBinds(table).has('entry')).toBe(binds);
+});
+
 test('a name the module never binds is refused at the list', () => {
     expect(() => checks(['load', 'lost'])).toThrow(/^host — `__all__` names `lost`, which this module never binds \(src\/a\.py:4\)\./);
 });

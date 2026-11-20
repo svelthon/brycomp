@@ -100,7 +100,7 @@ function symbolTable(ast, source) {
     };
     index(top);
 
-    return { top, blockOf: (node) => byNode.get(node[$B.ID]) };
+    return { top, ast, blockOf: (node) => byNode.get(node[$B.ID]) };
 }
 
 // Where a name resolves in a block: its scope, `GLOBAL_EXPLICIT` and
@@ -129,7 +129,33 @@ const blockBinds = (block) => {
     return bound;
 };
 
-const moduleBinds = (table) => blockBinds(table.top);
+// The names the module binds as Python runs it. Its block holds, inlined, the
+// targets of a comprehension written at its top, which bind none of its names
+// (`DEF_COMP_ITER`), and leaves out what another block binds into it: a
+// function's write under `global entry`, an assignment, a loop, an import, a
+// `def`, and the walrus of a comprehension at the top, which binds there.
+// `[entry for entry in rows]` leaves no `entry` in the module, `[(entry := row)
+// for row in rows]` and a function writing it under `global` do, and `__all__`
+// naming it was taken the other way round.
+const moduleBinds = (table) => {
+    const $B = engine();
+    const flags = $B.SYMBOL_FLAGS;
+    const bound = blockBinds(table.top);
+
+    for (const { key, value } of $B.builtins.dict.$iter_items(table.top.symbols)) {
+        if (value & flags.DEF_COMP_ITER) bound.delete(key);
+    }
+
+    walkScoped(table.ast.body, (node, scope) => {
+        if (scope === null || (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Del)) return;
+
+        const block = table.blockOf(scope);
+
+        for (const name of bindsHere(node)) if (scopeIn(block, name) === flags.GLOBAL_EXPLICIT) bound.add(name);
+    });
+
+    return bound;
+};
 
 // The builtins that read a value and keep nothing of it: given `__all__` or
 // `__js__`, they cannot change it behind the compiler's back.
