@@ -246,7 +246,10 @@ function vlq(value) {
 
 // Each Python line is mapped to the line of the file it is written on
 // (`fileLine`): a template function's, which follows the script, to its markup.
-function sourceMap(generated, source, content, lineOffset, ranges = []) {
+// A line past the author's (`lines`), the block that lets the module read a
+// builtin's name JavaScript gives it (`translation`), is mapped to nothing: it
+// was mapped past the end of the file.
+function sourceMap(generated, source, content, lineOffset, ranges = [], lines = Infinity) {
     // The line, and for a `class` the kind of statement after it, `'ClassDef'`.
     // Read with the line's strings taken out: a Python string holding the
     // marker's text is data, `'$B.set_lineno(frame, 9000)'`.
@@ -258,7 +261,7 @@ function sourceMap(generated, source, content, lineOffset, ranges = []) {
 
     for (const line of generated.split('\n')) {
         const found = line.includes('set_lineno') && line.replace(strings, "''").match(marker);
-        if (found) current = fileLine(Number(found[1]), lineOffset, ranges) - 1;
+        if (found) current = Number(found[1]) > lines ? null : fileLine(Number(found[1]), lineOffset, ranges) - 1;
 
         if (current === null) {
             segments.push('');

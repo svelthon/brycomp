@@ -113,7 +113,7 @@ export function compile(
         js,
         namespace,
         module,
-        map: sourceMap(module, source, sourceContent ?? src, lineOffset, ranges),
+        map: sourceMap(module, source, sourceContent ?? src, lineOffset, ranges, src.split('\n').length),
         jsImports,
         jsImported,
         imported: [...importedAt.keys()],

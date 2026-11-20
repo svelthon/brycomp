@@ -238,6 +238,19 @@ test("a string holding the marker's text maps to its own line", () => {
     expect(originalLines(map.mappings)[at]).toBe(0);
 });
 
+// The block that lets a module read a builtin's name JavaScript gives it,
+// `max`, follows the author's lines: it maps to nothing, where it was mapped
+// past the end of the file, two lines out of two, and two of four moved by two.
+test.for([
+    [0, [0]],
+    [2, [2]]
+])("the lines added for a builtin's name JavaScript gives map to nothing, the file %i lines in", ([lineOffset, authored]) => {
+    const { map } = bryc.compile(host, 'result = max(2, 3)\n', { ...options, jsNames: ['max'], lineOffset });
+    const mapped = originalLines(map.mappings).filter((one) => one !== null);
+
+    expect([...new Set(mapped)]).toEqual(authored);
+});
+
 // A template's function follows the script in the Python compiled, and its
 // lines map to the markup its expression is written on, as an error raised in
 // it is placed: moved by the script's offset alone, an expression of line 13
