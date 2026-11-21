@@ -73,7 +73,11 @@ optionally, how its own syntax becomes Python before the translation
 compiled to (`defs`), which Brycomp joins after the script, each where its
 markup stands; a host whose template reads a key with a dot writes them with
 `templateDots` first, and one that names what it binds for them to call
-(`adapters`) has each read off the namespace, with no search. Every member is described in `src/brycomp.js`, Brycomp's
+(`adapters`) has each read off the namespace, with no search. A host whose
+runtime does the commonest operations inline, `d[k]`, `d.get(k)`, `x in c`,
+`==` and `!=`, names where it publishes them (`fast`), and they are emitted as
+calls of it: Bryntime does, Brython alone does not, so a module compiled with
+`fast` runs only on that runtime. Every member is described in `src/brycomp.js`, Brycomp's
 one door.
 
 ## Demo

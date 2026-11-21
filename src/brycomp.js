@@ -79,6 +79,15 @@
 //            for the functions of its template to call, `['__text', '__key',
 //            …]`. A function reads one off the namespace, as it reads a name
 //            the module binds, and not by a search at each call.
+//   fast     optional: the member of the engine where the host's runtime
+//            publishes the commonest operations done inline, `'$bryntimeFast'`
+//            for Bryntime: `d[k]`, `d.get(k)`, `x in c`, `==` and `!=` are then
+//            emitted as a call of its `item`, `get1`/`get2`, `member`, `eq` and
+//            `ne`, with the engine's arguments, each answering as the engine's
+//            function does. Brython alone publishes no such member: a module
+//            compiled with `fast` runs only on that runtime, and fails at its
+//            first such operation on the engine alone. Without it, the engine's
+//            own calls, which run on either.
 //
 // Whatever names a thing the host provides belongs to the host, messages
 // included.

@@ -25,6 +25,52 @@ function counterStart(text) {
     return (fnv(0x811c9dc5) & 0x3ffff) * 2 ** 32 + fnv(0x050c5d1f);
 }
 
+// The commonest operations of the translation emitted as a call of what the
+// host's runtime publishes on the engine as `member` (`host.fast`), with the
+// engine's own arguments: one comparison by `==`, `!=`, `in` or `not in`, a
+// subscript that is no slice, and `x.get(k)` or `x.get(k, d)`. The runtime does
+// them inline where it can, and calls the engine's function otherwise. Only the
+// name called changes, so the generator's own code makes the rest; it is given
+// back by the function this answers.
+function fastEmission($B, member) {
+    const swap = (js, from, to) => (js.startsWith(from) ? to + js.slice(from.length) : js);
+    const swaps = new Map([
+        [$B.ast.Eq, ["$B.rich_comp('__eq__', ", `$B.${member}.eq(`]],
+        [$B.ast.NotEq, ["$B.rich_comp('__ne__', ", `$B.${member}.ne(`]],
+        [$B.ast.In, ['$B.$is_member(', `$B.${member}.member(`]],
+        [$B.ast.NotIn, ['! $B.$is_member(', `! $B.${member}.member(`]]
+    ]);
+    const compare = $B.ast.Compare.prototype.to_js;
+    const subscript = $B.ast.Subscript.prototype.to_js;
+    const call = $B.ast.Call.prototype.to_js;
+
+    $B.ast.Compare.prototype.to_js = function (scopes) {
+        const js = compare.call(this, scopes);
+        const pair = this.ops.length === 1 ? swaps.get(this.ops[0].constructor) : undefined;
+
+        return pair === undefined ? js : swap(js, ...pair);
+    };
+    $B.ast.Subscript.prototype.to_js = function (scopes) {
+        const js = subscript.call(this, scopes);
+
+        return this.slice instanceof $B.ast.Slice ? js : swap(js, '$B.$getitem(', `$B.${member}.item(`);
+    };
+    $B.ast.Call.prototype.to_js = function (scopes) {
+        const js = call.call(this, scopes);
+        const positional = this.args.length >= 1 && this.args.length <= 2 && this.keywords.length === 0 &&
+            !this.args.some((arg) => arg instanceof $B.ast.Starred);
+
+        if (!(this.func instanceof $B.ast.Attribute) || this.func.attr !== 'get' || !positional) return js;
+        return swap(js, '$B.call_attr(', `$B.${member}.get${this.args.length}(`);
+    };
+
+    return () => {
+        $B.ast.Compare.prototype.to_js = compare;
+        $B.ast.Subscript.prototype.to_js = subscript;
+        $B.ast.Call.prototype.to_js = call;
+    };
+}
+
 // Brython's translation of `text`, the Python of `source`.
 //
 // `named` is the name Python imports the module by, or null for a file nobody
@@ -81,11 +127,14 @@ function compilePython(host, text, { name, source, named = null, lineOffset = 0,
         };
     }
 
+    const plain = host.fast ? fastEmission($B, host.fast) : () => {};
+
     try {
         return $B.py2js({ src: text, filename: source }, name, [name]);
     } catch (error) {
         throw pythonError(host, error, source, lineOffset, authored, ranges, src);
     } finally {
+        plain();
         $B.ast.FunctionDef.prototype.to_js = compiled;
         $B.id_counter(counter);
         $B.lambda_magic = tag;
