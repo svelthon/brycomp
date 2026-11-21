@@ -158,5 +158,6 @@ export {
     moduleLoad
 } from './exports.js';
 
-// The JavaScript a source imports, and the names JavaScript gives the module.
-export { continuedLines, declaredJsImports, takeImportJs, jsImportLine, jsLocal, jsNameBindings } from './imports.js';
+// The JavaScript a source imports, the modules it imports of Python, and the
+// names JavaScript gives the module.
+export { continuedLines, declaredJsImports, takeImportJs, jsImportLine, jsLocal, jsNameBindings, moduleImports } from './imports.js';
