@@ -81,10 +81,12 @@
 //            the module binds, and not by a search at each call.
 //   fast     optional: the member of the engine where the host's runtime
 //            publishes the commonest operations done inline, `'$bryntimeFast'`
-//            for Bryntime: `d[k]`, `d.get(k)`, `x in c`, `==`, `!=` and the
-//            builtin's `isinstance(v, cls)` are then emitted as a call of its
-//            `item`, `get1`/`get2`, `member`, `eq`, `ne` and `isinstance`, with
-//            the engine's arguments, each answering as the engine's
+//            for Bryntime: `d[k]`, `d.get(k)`, `x in c`, `==`, `!=`,
+//            `s.strip()`, `sep.join(items)` and the builtins'
+//            `isinstance(v, cls)` and `id(v)` are then emitted as a call of
+//            its `item`, `get1`/`get2`, `member`, `eq`, `ne`, `strip0`,
+//            `join1`, `isinstance` and `id`, with the engine's arguments,
+//            each answering as the engine's
 //            function does. Brython alone publishes no such member: a module
 //            compiled with `fast` runs only on that runtime, and fails at its
 //            first such operation on the engine alone. Without it, the engine's

@@ -28,11 +28,11 @@ function counterStart(text) {
 // The commonest operations of the translation emitted as a call of what the
 // host's runtime publishes on the engine as `member` (`host.fast`), with the
 // engine's own arguments: one comparison by `==`, `!=`, `in` or `not in`, a
-// subscript that is no slice, `x.get(k)` or `x.get(k, d)`, and the builtin's
-// `isinstance(v, cls)`. The runtime does them inline where it can, and calls
-// the engine's function otherwise. Only the name called changes, so the
-// generator's own code makes the rest; it is given back by the function this
-// answers.
+// subscript that is no slice, `x.get(k)` or `x.get(k, d)`, `s.strip()`,
+// `sep.join(items)`, and the builtins' `isinstance(v, cls)` and `id(v)`. The
+// runtime does them inline where it can, and calls the engine's function
+// otherwise. Only the name called changes, so the generator's own code makes
+// the rest; it is given back by the function this answers.
 function fastEmission($B, member) {
     const swap = (js, from, to) => (js.startsWith(from) ? to + js.slice(from.length) : js);
     const swaps = new Map([
@@ -56,18 +56,25 @@ function fastEmission($B, member) {
 
         return this.slice instanceof $B.ast.Slice ? js : swap(js, '$B.$getitem(', `$B.${member}.item(`);
     };
+    // The builtins and the methods done inline, by the number of positional
+    // arguments each is done for.
+    const builtins = new Map([['isinstance', [2]], ['id', [1]]]);
+    const methods = new Map([['get', [1, 2]], ['strip', [0]], ['join', [1]]]);
+
     $B.ast.Call.prototype.to_js = function (scopes) {
         const js = call.call(this, scopes);
-        const positional = this.args.length >= 1 && this.args.length <= 2 && this.keywords.length === 0 &&
-            !this.args.some((arg) => arg instanceof $B.ast.Starred);
+        const count = this.args.length;
 
-        // The generator calls the builtin by its name on the builtins,
+        if (this.keywords.length > 0 || this.args.some((arg) => arg instanceof $B.ast.Starred)) return js;
+        // The generator calls a builtin by its name on the builtins,
         // `_b_.isinstance`, and a name the module binds otherwise.
-        if (this.func instanceof $B.ast.Name && this.func.id === 'isinstance' && positional && this.args.length === 2) {
-            return swap(js, '$B.$call_with_position(_b_.isinstance, ', `$B.${member}.isinstance(`);
+        if (this.func instanceof $B.ast.Name && builtins.get(this.func.id)?.includes(count)) {
+            return swap(js, `$B.$call_with_position(_b_.${this.func.id}, `, `$B.${member}.${this.func.id}(`);
         }
-        if (!(this.func instanceof $B.ast.Attribute) || this.func.attr !== 'get' || !positional) return js;
-        return swap(js, '$B.call_attr(', `$B.${member}.get${this.args.length}(`);
+        if (this.func instanceof $B.ast.Attribute && methods.get(this.func.attr)?.includes(count)) {
+            return swap(js, '$B.call_attr(', `$B.${member}.${this.func.attr}${count}(`);
+        }
+        return js;
     };
 
     return () => {
