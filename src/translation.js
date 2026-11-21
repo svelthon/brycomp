@@ -28,10 +28,11 @@ function counterStart(text) {
 // The commonest operations of the translation emitted as a call of what the
 // host's runtime publishes on the engine as `member` (`host.fast`), with the
 // engine's own arguments: one comparison by `==`, `!=`, `in` or `not in`, a
-// subscript that is no slice, and `x.get(k)` or `x.get(k, d)`. The runtime does
-// them inline where it can, and calls the engine's function otherwise. Only the
-// name called changes, so the generator's own code makes the rest; it is given
-// back by the function this answers.
+// subscript that is no slice, `x.get(k)` or `x.get(k, d)`, and the builtin's
+// `isinstance(v, cls)`. The runtime does them inline where it can, and calls
+// the engine's function otherwise. Only the name called changes, so the
+// generator's own code makes the rest; it is given back by the function this
+// answers.
 function fastEmission($B, member) {
     const swap = (js, from, to) => (js.startsWith(from) ? to + js.slice(from.length) : js);
     const swaps = new Map([
@@ -60,6 +61,11 @@ function fastEmission($B, member) {
         const positional = this.args.length >= 1 && this.args.length <= 2 && this.keywords.length === 0 &&
             !this.args.some((arg) => arg instanceof $B.ast.Starred);
 
+        // The generator calls the builtin by its name on the builtins,
+        // `_b_.isinstance`, and a name the module binds otherwise.
+        if (this.func instanceof $B.ast.Name && this.func.id === 'isinstance' && positional && this.args.length === 2) {
+            return swap(js, '$B.$call_with_position(_b_.isinstance, ', `$B.${member}.isinstance(`);
+        }
         if (!(this.func instanceof $B.ast.Attribute) || this.func.attr !== 'get' || !positional) return js;
         return swap(js, '$B.call_attr(', `$B.${member}.get${this.args.length}(`);
     };
