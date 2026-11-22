@@ -277,7 +277,7 @@ function holds(value, parts, seen = new Set()) {
 // compiled, and the two bodies then count differently.
 function runStatements(src, statements) {
     const $B = engine();
-    const name = '__bryc_all__';
+    const name = '__brycomp_all__';
     const tree = $B._PyPegen.run_parser(new $B.Parser(src, name, 'file'));
     const at = (node) => `${node.lineno}:${node.col_offset}`;
     const parsed = new Map(tree.body.map((node) => [at(node), node]));
@@ -554,7 +554,7 @@ const unboundRefusals = (host, unbound, listedAt) =>
 // decorator's data, a `42` written over it, or nothing after `del`, as data.
 // Made once at import, it went on being a function after Python had made the
 // name a number, and stayed a number after Python had made it a function again.
-const exportCell = (name) => `__export_${name}`;
+const exportCell = (name) => `__brycomp_export_${name}`;
 
 // An import re-exported from the variable it is held under (`jsLocal`).
 function moduleExports(host, { exported, jsImported }) {
@@ -574,8 +574,8 @@ const liveExportLines = (host, { exported, jsImported, source }) =>
         .filter((n) => !jsImported.includes(n))
         .map(
             (n) =>
-                `${host.runtime.liveExport}(${NS}, ${JSON.stringify(n)}, (__value) => { ${exportCell(n)} = ` +
-                `${host.runtime.pyExport}(__value, ${JSON.stringify(`${n} — ${source}`)}); });`
+                `${host.runtime.liveExport}(${NS}, ${JSON.stringify(n)}, (__brycomp_value) => { ${exportCell(n)} = ` +
+                `${host.runtime.pyExport}(__brycomp_value, ${JSON.stringify(`${n} — ${source}`)}); });`
         );
 
 // The function that runs a module's body, which an import calls and the

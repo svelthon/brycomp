@@ -297,9 +297,9 @@ test('with a star import, a name not yet bound waits, and is refused once the bo
 const module = { exported: ['load', 'navigate'], jsImported: ['navigate'], source: 'src/+page.server.py' };
 
 test('each name exported live, a JavaScript import as its own binding', () => {
-    expect(brycomp.moduleExports(host, module)).toEqual(['let __export_load;', 'export { __export_load as load, navigate };']);
+    expect(brycomp.moduleExports(host, module)).toEqual(['let __brycomp_export_load;', 'export { __brycomp_export_load as load, navigate };']);
     expect(brycomp.liveExportLines(host, module)).toEqual([
-        `liveExport(${NS}, "load", (__value) => { __export_load = pyExport(__value, "load — src/+page.server.py"); });`
+        `liveExport(${NS}, "load", (__brycomp_value) => { __brycomp_export_load = pyExport(__brycomp_value, "load — src/+page.server.py"); });`
     ]);
 });
 
@@ -308,7 +308,7 @@ test('each name exported live, a JavaScript import as its own binding', () => {
 test('an import named like one of the framework’s words is re-exported from its variable', () => {
     const runes = { ...host, runes: ['effect'] };
 
-    expect(brycomp.moduleExports(runes, { exported: ['effect'], jsImported: ['effect'] })).toEqual(['export { __import_effect as effect };']);
+    expect(brycomp.moduleExports(runes, { exported: ['effect'], jsImported: ['effect'] })).toEqual(['export { __brycomp_import_effect as effect };']);
 });
 
 test('a module that exports nothing writes no export', () => {

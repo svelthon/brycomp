@@ -26,7 +26,7 @@
 //            `'tool/bridge'`.
 //   runtime  the name the generated code reaches each function of that runtime
 //            by, keyed by the function's own: `{ withNamespace:
-//            '__withNamespace', pyError: '__pyError', … }` where the
+//            '__brycomp_withNamespace', pyError: '__brycomp_pyError', … }` where the
 //            component's own names share the scope, `{ withNamespace:
 //            'withNamespace', … }` where they do not. `templateDots`, for a
 //            host that asks it, writes a dot as a call to `readAttr` and to
@@ -40,7 +40,7 @@
 //                                      `triggerRef(x)`;
 //              value(cell)             what it holds: `x`, `x.value`;
 //              read(name, cell)        what it holds, read so that a bump
-//                                      moves the reader: `(__rev_x, x)`,
+//                                      moves the reader: `(__brycomp_rev_x, x)`,
 //                                      `x.value`;
 //              write(cell, value)      the assignment: `x = v`, `x.value = v`.
 //   reserved the framework's own words, which an author may not redefine:
@@ -76,7 +76,7 @@
 //            for Svelte, none for Vue. A JavaScript import of one is held
 //            under another variable, and Python reads it under its own name.
 //   adapters optional: the names the host binds in a component's namespace
-//            for the functions of its template to call, `['__text', '__key',
+//            for the functions of its template to call, `['__brycomp_text', '__brycomp_key',
 //            …]`. A function reads one off the namespace, as it reads a name
 //            the module binds, and not by a search at each call.
 //   fast     optional: the member of the engine where the host's runtime

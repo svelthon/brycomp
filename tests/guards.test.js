@@ -107,7 +107,7 @@ describe('BRYTHON.md names every member Brycomp reaches for', () => {
 test('the code of Brycomp names no framework, no rune and no bridge', () => {
     const named = files(SRC).flatMap((file) =>
         code(file)
-            .filter(([, line]) => /svelte|svelthon|__pybridge|\$(?:state|derived|effect|props|bindable|inspect|host)\b/i.test(line))
+            .filter(([, line]) => /svelte|svelthon|__brycomp_pybridge|\$(?:state|derived|effect|props|bindable|inspect|host)\b/i.test(line))
             .map(([where, line]) => `${where}: ${line.trim()}`)
     );
 

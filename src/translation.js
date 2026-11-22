@@ -190,7 +190,7 @@ function translation(host, root, names, options) {
 }
 
 // Name the generated module gives to the reactive namespace it receives.
-const NS = '__py';
+const NS = '__brycomp_py';
 
 // Brython emits module state into a namespace object:
 //     locals_Counter = $B.namespace('Counter')
@@ -265,7 +265,7 @@ function moduleCode(host, { js, namespace, source }) {
 
 // What the namespace inherits its names from: one accessor per name, which
 // reads and writes the cell that holds it, so the namespace is a view of them.
-const PROTO = '__proto';
+const PROTO = '__brycomp_proto';
 
 // The namespace the Python body runs in, made of the accessors (`PROTO`), and
 // known to Python by `name`. Replaced by a new one when a module's body raises
@@ -356,11 +356,11 @@ function sourceMap(generated, source, content, lineOffset, ranges = [], lines = 
 // and the host's own words cannot either. A name the generated code uses for
 // itself is a third category, and the answer to that category is a prefix
 // rather than a list.
-const NEXT_VALUE = '__next';
+const NEXT_VALUE = '__brycomp_next';
 
 // What a change in place of the name's container calls, which moves every
 // reader of the name: `track` keeps on it what the name holds.
-const bump = (name) => `__bump_${name}`;
+const bump = (name) => `__brycomp_bump_${name}`;
 
 // The cell that holds `name`, under the variable `cell`, as the host makes a
 // state: what it declares, with the `bump` that moves the state's readers.
@@ -403,10 +403,10 @@ function stateBinding(host, name, cell, { subs = null, held = null, track = host
     const tracked = (value) => `${track}(${value}, ${bump(name)}${subs === null ? '' : `, ${subs}`})`;
     const readOf = (value) => (read === null ? value : `${read}(${value}, ${bump(name)})`);
     const write =
-        `const __was = ${bump(name)}.held;` +
-        ` try { const __written = ${tracked(NEXT_VALUE)};` +
-        ` if (!${changesNothing}(__written, __was)) ${host.state.write(cell, '__written')}; }` +
-        ` catch (__refused) { ${tracked('__was')}; throw __refused; }`;
+        `const __brycomp_was = ${bump(name)}.held;` +
+        ` try { const __brycomp_written = ${tracked(NEXT_VALUE)};` +
+        ` if (!${changesNothing}(__brycomp_written, __brycomp_was)) ${host.state.write(cell, '__brycomp_written')}; }` +
+        ` catch (__brycomp_refused) { ${tracked('__brycomp_was')}; throw __brycomp_refused; }`;
 
     return (
         `${bind}(${PROTO}, '${name}', () => (${SHAPING}.on ? ${followOwn}(${readOf(host.state.value(cell, name))}) : ${readOf(host.state.read(name, cell))}), ` +
@@ -438,16 +438,15 @@ yield arguments eval undefined`.split(/\s+/));
 
 // The compiler's own prefix, and the one rule that keeps it.
 //
-// The compiler builds names out of the author's, `__fn_go` out of `go`, and
-// declares them in the same scope as the author's names: an author's name of
-// that shape collides with the construct that emits it, `Identifier '__fn_go'
-// has already been declared`, inside the emitted script.
+// Every name the compiler writes, and every name its host writes into the same
+// module, starts with `__brycomp_`: `__brycomp_fn_go` out of `go`, the
+// template's `__brycomp_text`, declared in the same scope as the author's names.
+// An author's name with that prefix would collide with one of them, so it is
+// the one refused; every other name is the author's, `__cache` included.
 //
 // A prefix rather than a list, because a list cannot cover the family added
-// next. And a *trailing* `__` is what makes it safe: every name Python itself
-// puts in a module carries one, `__all__`, `__doc__`, `__js__`, so the rule
-// refuses the compiler's shape and leaves Python's alone.
-const COMPILER_PREFIX = /^__(?!.*__$)/;
+// next, and one no author writes, as a tool names its own (`__webpack_require__`).
+const COMPILER_PREFIX = /^__brycomp_/;
 
 // What an `importjs` clause may contain, and ASCII is a defensible line there
 // even though JavaScript takes `let élève = 1`: the name is one the author
@@ -465,13 +464,13 @@ const PY_NAME = /^[\p{XID_Start}_]\p{XID_Continue}*$/u;
 
 // Why the local name of a JavaScript import cannot be bound, or null. It is a
 // binding of the generated module, so it answers to the two rules every name
-// there does: `new` and `default` stopped the module parsing, `__py` declared a
+// there does: `new` and `default` stopped the module parsing, `__brycomp_py` declared a
 // name the compiler had declared already, and both were said by the JavaScript
 // parser downstream rather than at the line that wrote them.
 function unbindable(name) {
     if (!JS_NAME.test(name)) return 'which is not a name';
     if (JS_RESERVED.has(name)) return 'which JavaScript reserves, so the generated module cannot bind it';
-    if (COMPILER_PREFIX.test(name)) return "which starts with `__`, the compiler's own prefix";
+    if (COMPILER_PREFIX.test(name)) return "which starts with `__brycomp_`, the compiler's own prefix";
 
     return null;
 }

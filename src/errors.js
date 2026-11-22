@@ -146,7 +146,7 @@ function pythonError(host, error, source, lineOffset, block = '', ranges = [], s
                 // read back out of the function the template's pass wrote, it
                 // kept the pair the pass holds it in, and `{#if a = 5}` was
                 // quoted `(a = 5)`. Else out of the wrapper the pass put around
-                // it, `__text(…)`, `__truthy(…)`.
+                // it, `__brycomp_text(…)`, `__brycomp_truthy(…)`.
                 const written =
                     range[4] ??
                     src

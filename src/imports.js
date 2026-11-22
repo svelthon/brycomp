@@ -346,7 +346,7 @@ function takeImportJs(host, src, where, lineOffset, allowed) {
 // (`host.runes`): Svelte reads `$effect` as a store as soon as the module binds
 // `effect`, which turns every `$effect` it writes into a read of the import.
 // Python still reads the import under its own name (`jsNameBindings`).
-const jsLocal = (host, name) => ((host.runes ?? []).includes(name) ? `__import_${name}` : name);
+const jsLocal = (host, name) => ((host.runes ?? []).includes(name) ? `__brycomp_import_${name}` : name);
 
 // One import statement, in whichever of the five shapes it was declared.
 function jsImportLine(host, one) {

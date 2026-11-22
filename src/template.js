@@ -11,7 +11,7 @@ import { refuse } from './errors.js';
 // agree. After the prefix, the pass may say how the value is read (`set_` for
 // the write half of a binding), and a `_late` at the end says the function's
 // parameters arrive as functions.
-const EXPR_PREFIX = '__expr_';
+const EXPR_PREFIX = '__brycomp_expr_';
 
 // A host's template may give the dot a meaning of its own, a key found as well
 // as an attribute: `{pep.title}` reading a dict, where the same text in the

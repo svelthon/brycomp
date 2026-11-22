@@ -209,11 +209,11 @@ test("an import named like one of the framework's words is imported under anothe
     const runes = { ...host, runes: ['effect', 'state'] };
 
     expect(brycomp.jsImportLine(runes, { from: './x.js', kind: 'named', entries: [{ name: 'effect', local: 'effect' }, { name: 'go', local: 'go' }] })).toBe(
-        'import { effect as __import_effect, go } from "./x.js";'
+        'import { effect as __brycomp_import_effect, go } from "./x.js";'
     );
-    expect(brycomp.jsImportLine(runes, { from: './x.js', kind: 'default', entries: [{ name: 'default', local: 'state' }] })).toBe('import __import_state from "./x.js";');
+    expect(brycomp.jsImportLine(runes, { from: './x.js', kind: 'default', entries: [{ name: 'default', local: 'state' }] })).toBe('import __brycomp_import_state from "./x.js";');
     expect(brycomp.jsNameBindings(runes, { jsImported: ['effect'], declared: [], source }, ['state'])).toEqual([
-        `bind(${P}, 'effect', () => jsCall(__import_effect), () => readOnly("effect", "src/a.py"));`,
+        `bind(${P}, 'effect', () => jsCall(__brycomp_import_effect), () => readOnly("effect", "src/a.py"));`,
         `bind(${P}, 'state', () => jsCall(state));`
     ]);
 });

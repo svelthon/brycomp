@@ -90,7 +90,7 @@ test("an error in a template's function is refused at the markup, the expression
     // the markup.
     const error = refusal('x = 1\n', {
         component: true,
-        defs: ['def __expr_0():\n    return __text(a ? b : c)'],
+        defs: ['def __brycomp_expr_0():\n    return __brycomp_text(a ? b : c)'],
         defLines: [7],
         defColumns: [4]
     });
@@ -101,7 +101,7 @@ test("an error in a template's function is refused at the markup, the expression
 
 // So is a refusal of what Python accepts, a call that cannot run in the page.
 test("a refusal in a template's function stands on the markup's line", () => {
-    const error = refusal('x = 1\n', { component: true, defs: ['def __expr_0():\n    return eval("2")'], defLines: [100], defColumns: [6] });
+    const error = refusal('x = 1\n', { component: true, defs: ['def __brycomp_expr_0():\n    return eval("2")'], defLines: [100], defColumns: [6] });
 
     expect([error.message.match(/\(src\/probe\.py:\d+\)/)?.[0], error.start?.line]).toEqual(['(src/probe.py:100)', 100]);
 });
@@ -260,7 +260,7 @@ test("a template function's lines map to the markup line of its expression", () 
         ...options,
         component: true,
         lineOffset: 1,
-        defs: ['def __expr_0():\n    return ("MARKED")'],
+        defs: ['def __brycomp_expr_0():\n    return ("MARKED")'],
         defLines: [12],
         defColumns: [4]
     });
@@ -279,7 +279,7 @@ test("a template function's lines map to the markup line of its expression", () 
 // A host whose generated names share no scope with the author's, as a Vue
 // component's do not, and one whose do, as a Svelte script's.
 const plain = { name: 'host', bridge: 'host/bridge', runtime: { withNamespace: 'withNamespace', pyError: 'pyError' } };
-const prefixed = { ...plain, runtime: { withNamespace: '__withNamespace', pyError: '__pyError' } };
+const prefixed = { ...plain, runtime: { withNamespace: '__brycomp_withNamespace', pyError: '__brycomp_pyError' } };
 
 const compiled = (host, named = null) => brycomp.compile(host, 'x = 1\n', { name: 'a', source: 'src/a.py', named });
 
@@ -294,12 +294,12 @@ test('the module imports its runtime from the bridge, under the names the host g
         `    return withNamespace("src/a_py", ${NS}, () => {`
     ]);
     expect(code(plain).slice(-3)).toEqual(['    });', '  } catch (err) { throw pyError(err,"src/a.py"); }', '}']);
-    expect(code(prefixed)[0]).toBe('import { withNamespace as __withNamespace, pyError as __pyError } from "host/bridge";');
+    expect(code(prefixed)[0]).toBe('import { withNamespace as __brycomp_withNamespace, pyError as __brycomp_pyError } from "host/bridge";');
     // A path is written as a JavaScript string, a quote in it escaped.
     expect(compiled({ ...plain, bridge: "./O'Brien/bridge.mjs" }).module.split('\n')[0]).toBe(
         'import { withNamespace, pyError } from "./O\'Brien/bridge.mjs";'
     );
-    expect(code(prefixed)[4]).toBe(`    return __withNamespace("src/a_py", ${NS}, () => {`);
+    expect(code(prefixed)[4]).toBe(`    return __brycomp_withNamespace("src/a_py", ${NS}, () => {`);
 });
 
 test('the namespace is the file, or the module Python imports it by', () => {
@@ -389,16 +389,16 @@ test('one a body may replace is a `let`', () => {
 test('the cell is the host\'s state, with the bump that moves its readers', () => {
     expect(brycomp.stateCell(host, 'count', '__ref_count')).toEqual([
         'const __ref_count = shallowRef(undefined);',
-        'const __bump_count = () => triggerRef(__ref_count);'
+        'const __brycomp_bump_count = () => triggerRef(__ref_count);'
     ]);
 });
 
 test('the accessor reads and writes the cell as the host does, through track', () => {
     expect(brycomp.stateBinding(host, 'count', '__ref_count')).toBe(
         `bind(${brycomp.PROTO}, 'count', () => (SHAPING.on ? followOwn(__ref_count.value) : __ref_count.value), ` +
-            `(${next}) => { const __was = __bump_count.held; try { const __written = track(${next}, __bump_count);` +
-            ` if (!changesNothing(__written, __was)) __ref_count.value = __written; }` +
-            ` catch (__refused) { track(__was, __bump_count); throw __refused; } });`
+            `(${next}) => { const __brycomp_was = __brycomp_bump_count.held; try { const __brycomp_written = track(${next}, __brycomp_bump_count);` +
+            ` if (!changesNothing(__brycomp_written, __brycomp_was)) __ref_count.value = __brycomp_written; }` +
+            ` catch (__brycomp_refused) { track(__brycomp_was, __brycomp_bump_count); throw __brycomp_refused; } });`
     );
 });
 
@@ -406,7 +406,7 @@ test('the accessor reads and writes the cell as the host does, through track', (
 // follow on the value the cell kept, where `track` had moved it onto the one
 // refused; the host's own error reaches the writer.
 test('a write the host refuses leaves the name followed as the cell holds it', () => {
-    const line = brycomp.stateBinding(host, 'items', '__ref_items', { subs: '__subs' });
+    const line = brycomp.stateBinding(host, 'items', '__ref_items', { subs: '__brycomp_subs' });
     const refused = new Error('refused');
     const cell = {
         held: 'first',
@@ -430,7 +430,7 @@ test('a write the host refuses leaves the name followed as the cell holds it', (
     const accessors = {};
     const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
 
-    new Function(brycomp.PROTO, '__ref_items', '__bump_items', '__subs', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', line)(
+    new Function(brycomp.PROTO, '__ref_items', '__brycomp_bump_items', '__brycomp_subs', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', line)(
         proto, cell, bump, subs, bind, { on: false }, (one) => one, track, (one, other) => one === other
     );
     accessors.set('first');
@@ -451,16 +451,16 @@ test('a write the host refuses leaves the name followed as the cell holds it', (
 test('the host reads the cell for the rows of a loop knowing the name, as it reads the name', () => {
     const told = [];
     const naming = { ...host, state: { ...host.state, value: (cell, name) => (told.push(name), `${cell}.value`) } };
-    brycomp.stateBinding(naming, 'go', '__fn_go');
+    brycomp.stateBinding(naming, 'go', '__brycomp_fn_go');
 
     expect(told).toEqual(['go']);
 });
 
 test("an instance signs its containers onto its own list, and a function's accessor hands what it holds", () => {
-    const line = brycomp.stateBinding(host, 'go', '__fn_go', { subs: '__subs', held: '__fn_go' });
+    const line = brycomp.stateBinding(host, 'go', '__brycomp_fn_go', { subs: '__brycomp_subs', held: '__brycomp_fn_go' });
 
-    expect(line).toContain(`track(${next}, __bump_go, __subs)`);
-    expect(line.endsWith(' }, () => __fn_go);')).toBe(true);
+    expect(line).toContain(`track(${next}, __brycomp_bump_go, __brycomp_subs)`);
+    expect(line.endsWith(' }, () => __brycomp_fn_go);')).toBe(true);
 });
 
 // A state the host makes its own copy of is tracked by the host's function,
@@ -474,13 +474,13 @@ test("a write keeps what the host's own track gives of the value", () => {
     const accessors = {};
     const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
 
-    new Function(brycomp.PROTO, '__ref_rows', '__bump_rows', 'bind', 'SHAPING', 'followOwn', 'ownTrack', 'changesNothing', line)(
+    new Function(brycomp.PROTO, '__ref_rows', '__brycomp_bump_rows', 'bind', 'SHAPING', 'followOwn', 'ownTrack', 'changesNothing', line)(
         {}, cell, bump, bind, { on: false }, (one) => one, ownTrack, (one, other) => one === other
     );
     accessors.set(['a']);
 
     expect([cell.value, bump.held === cell.value]).toEqual([{ copy: ['a'] }, true]);
-    expect(line).toContain('catch (__refused) { ownTrack(__was, __bump_rows); throw __refused; }');
+    expect(line).toContain('catch (__brycomp_refused) { ownTrack(__brycomp_was, __brycomp_bump_rows); throw __brycomp_refused; }');
 });
 
 // And Python reads what the host's `read` gives of what the cell holds, on
@@ -493,7 +493,7 @@ test("a read is what the host's own read gives of the cell", () => {
     const bind = (target, name, get, set) => Object.assign(accessors, { get, set });
     const shaping = { on: false };
 
-    new Function(brycomp.PROTO, '__ref_rows', '__bump_rows', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', 'ownRead', line)(
+    new Function(brycomp.PROTO, '__ref_rows', '__brycomp_bump_rows', 'bind', 'SHAPING', 'followOwn', 'track', 'changesNothing', 'ownRead', line)(
         {}, cell, bump, bind, shaping, (one) => `followed ${one}`, (one) => one, (one, other) => one === other, (one, moved) => `${one} as read by ${moved === bump}`
     );
     const read = accessors.get();
@@ -511,13 +511,13 @@ test("a read is what the host's own read gives of the cell", () => {
 const component = (text, more) => brycomp.compile(host, text, { name: 'Probe', source: 'src/Probe.svelte', component: true, ...more });
 
 test('the script dedented, the functions after it as written, each where its markup stands', () => {
-    const defs = ['def __expr_0(row):\n    return __text(row.name)', 'def __expr_1():\n    return __text(1)'];
+    const defs = ['def __brycomp_expr_0(row):\n    return __brycomp_text(row.name)', 'def __brycomp_expr_1():\n    return __brycomp_text(1)'];
     const { src, ranges, templateLine } = component('    x = 1\n\n    y = 2', { defs, defLines: [12, 14], defColumns: [4, 0], defTexts: ['row.name', '1'] });
 
     expect(src).toBe(
         'x = 1\n\ny = 2\n' +
-            'def __expr_0(row):\n    return __text(row.name)\n\n' +
-            'def __expr_1():\n    return __text(1)\n'
+            'def __brycomp_expr_0(row):\n    return __brycomp_text(row.name)\n\n' +
+            'def __brycomp_expr_1():\n    return __brycomp_text(1)\n'
     );
     // Python lines 4 to 5 and 7 to 8, the markup's line 12, column 4, and 14,
     // and each expression as written.
@@ -539,15 +539,15 @@ test('a script with no template functions is the script, dedented', () => {
 // the module binds was searched for at each call, through the function's own
 // locals first.
 test("a template's function reads the host's adapter off the namespace", () => {
-    const defs = ['def __expr_0(row):\n    return __text(row["name"])'];
+    const defs = ['def __brycomp_expr_0(row):\n    return __brycomp_text(row["name"])'];
     const read = (more) => brycomp.compile({ ...host, ...more }, 'x = 1', { name: 'Probe', source: 'src/Probe.svelte', component: true, defs }).js;
     const namespace = 'locals_src_Probe_svelte';
 
-    expect(read()).toContain(`$B.resolve_in_scopes('__text', [${namespace}___expr_0,${namespace},_b_]`);
-    expect(read({ adapters: ['__text'] })).toContain(`(${namespace}.__text ?? $B.resolve_in_scopes('__text', [${namespace}, _b_]))`);
-    expect(read({ adapters: ['__text'] })).not.toContain(`${namespace}___expr_0,${namespace},_b_`);
+    expect(read()).toContain(`$B.resolve_in_scopes('__brycomp_text', [${namespace}___brycomp_expr_0,${namespace},_b_]`);
+    expect(read({ adapters: ['__brycomp_text'] })).toContain(`(${namespace}.__brycomp_text ?? $B.resolve_in_scopes('__brycomp_text', [${namespace}, _b_]))`);
+    expect(read({ adapters: ['__brycomp_text'] })).not.toContain(`${namespace}___brycomp_expr_0,${namespace},_b_`);
     // And no compile after it reads one so.
-    expect(read()).toContain(`$B.resolve_in_scopes('__text', [${namespace}___expr_0,${namespace},_b_]`);
+    expect(read()).toContain(`$B.resolve_in_scopes('__brycomp_text', [${namespace}___brycomp_expr_0,${namespace},_b_]`);
 });
 
 // **A host whose template's dot reads a key rewrites its functions with
@@ -557,15 +557,15 @@ test("a template's function reads the host's adapter off the namespace", () => {
 // A script's own text is no template's, and the tool is not applied to it.
 test("a host's template dot becomes its runtime's calls, under the names it gives them", () => {
     const named = (readAttr, writeAttr) => ({ ...host, runtime: { ...host.runtime, readAttr, writeAttr } });
-    const read = 'def __expr_0(row):\n    return __text(row.name)';
-    const write = 'def __expr_set_0(value, row):\n    row.label = value';
+    const read = 'def __brycomp_expr_0(row):\n    return __brycomp_text(row.name)';
+    const write = 'def __brycomp_expr_set_0(value, row):\n    row.label = value';
 
-    expect(brycomp.templateDots(named('__getattr', '__setattr'), read)).toBe('def __expr_0(row):\n    return __text(__getattr(row, "name"))');
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __expr_0(row):\n    return __text(readAttr(row, "name"))');
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __expr_set_0(value, row):\n    writeAttr(row, "label", (value))');
+    expect(brycomp.templateDots(named('__brycomp_getattr', '__brycomp_setattr'), read)).toBe('def __brycomp_expr_0(row):\n    return __brycomp_text(__brycomp_getattr(row, "name"))');
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __brycomp_expr_0(row):\n    return __brycomp_text(readAttr(row, "name"))');
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __brycomp_expr_set_0(value, row):\n    writeAttr(row, "label", (value))');
     // A dot over two lines keeps the second, so the next line stays its own.
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
-        'def __expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __brycomp_expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
+        'def __brycomp_expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
     );
     // A name the function binds of a helper's spelling would take its call:
     // a parameter, a lambda's, a comprehension's, a walrus.
@@ -577,18 +577,18 @@ test("a host's template dot becomes its runtime's calls, under the names it give
         '[(readAttr := 0), row.name]',
         '(lambda writeAttr: row.name)(0)'
     ]) {
-        expect(() => brycomp.templateDots(reading, `def __expr_0(row):\n    return ${body}`)).toThrow(/is the helper a template expression calls/);
+        expect(() => brycomp.templateDots(reading, `def __brycomp_expr_0(row):\n    return ${body}`)).toThrow(/is the helper a template expression calls/);
     }
-    expect(brycomp.templateDots(reading, 'def __expr_0(row):\n    return (lambda other: row.name)(0)')).toBe(
-        'def __expr_0(row):\n    return (lambda other: readAttr(row, "name"))(0)'
+    expect(brycomp.templateDots(reading, 'def __brycomp_expr_0(row):\n    return (lambda other: row.name)(0)')).toBe(
+        'def __brycomp_expr_0(row):\n    return (lambda other: readAttr(row, "name"))(0)'
     );
     // A dot in a comment is none.
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __expr_0(row):\n    return (row. # see profile.name\n            name)')).toBe(
-        'def __expr_0(row):\n    return (readAttr(row, "name"\n))'
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __brycomp_expr_0(row):\n    return (row. # see profile.name\n            name)')).toBe(
+        'def __brycomp_expr_0(row):\n    return (readAttr(row, "name"\n))'
     );
     // A comment after a parenthesised target is left out of what closes it.
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
-        'def __expr_set_0(value, row):\n    writeAttr((row), "label",\n\n (value))'
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __brycomp_expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
+        'def __brycomp_expr_set_0(value, row):\n    writeAttr((row), "label",\n\n (value))'
     );
 });
 
@@ -597,7 +597,7 @@ test("a host's template dot becomes its runtime's calls, under the names it give
 // the helper four arguments.
 test('a write in a template hands its runtime the whole value, grouped or a tuple', () => {
     const writing = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
-    const set = (value) => brycomp.templateDots(writing, `def __expr_set_0(value, row):\n    row.label = ${value}`).split('\n').slice(1).join('\n');
+    const set = (value) => brycomp.templateDots(writing, `def __brycomp_expr_set_0(value, row):\n    row.label = ${value}`).split('\n').slice(1).join('\n');
 
     expect(set('(value)')).toBe('    writeAttr(row, "label", ((value)))');
     expect(set('(value + 1)')).toBe('    writeAttr(row, "label", ((value + 1)))');
@@ -610,18 +610,18 @@ test('a write in a template hands its runtime the whole value, grouped or a tupl
 // as everywhere, a call, where the target was left as it was and assigned
 // into the function standing for the row.
 test("a parameter handed late is called where a comprehension's target reads it", () => {
-    const late = 'def __expr_0_late(row):\n    return (0 for row["flag"] in [1, 2])';
+    const late = 'def __brycomp_expr_0_late(row):\n    return (0 for row["flag"] in [1, 2])';
 
-    expect(brycomp.templateDots(host, late)).toBe('def __expr_0_late(row):\n    return (0 for row()["flag"] in [1, 2])');
+    expect(brycomp.templateDots(host, late)).toBe('def __brycomp_expr_0_late(row):\n    return (0 for row()["flag"] in [1, 2])');
 });
 
 // In an `async def` as in a `def`: read as written, the parameter stayed the
 // function standing for it, and `row + 1` added an int to it. One not handed
 // late is read as it is.
 test.for([
-    ['async def __expr_0_late(row):\n    return row + 1', 'async def __expr_0_late(row):\n    return row() + 1'],
-    ['async def __expr_0_late(row):\n    return row.title', 'async def __expr_0_late(row):\n    return readAttr(row(), "title")'],
-    ['async def __expr_0(row):\n    return row + 1', 'async def __expr_0(row):\n    return row + 1']
+    ['async def __brycomp_expr_0_late(row):\n    return row + 1', 'async def __brycomp_expr_0_late(row):\n    return row() + 1'],
+    ['async def __brycomp_expr_0_late(row):\n    return row.title', 'async def __brycomp_expr_0_late(row):\n    return readAttr(row(), "title")'],
+    ['async def __brycomp_expr_0(row):\n    return row + 1', 'async def __brycomp_expr_0(row):\n    return row + 1']
 ])('an asynchronous template function reads its parameters as handed: %s', ([written, expected]) => {
     const reading = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
 
@@ -640,5 +640,5 @@ test.for([
     ['[row, [row for row in [row]]]', '[row(), [row for row in [row()]]]'],
     ['[row, [capture() for row in [1, 2] for capture in [lambda: row]]]', '[row(), [capture() for row in [1, 2] for capture in [lambda: row]]]']
 ])('a parameter handed late is the comprehension’s own where it binds it: %s', ([body, expected]) => {
-    expect(brycomp.templateDots(host, `def __expr_0_late(row):\n    return ${body}`)).toBe(`def __expr_0_late(row):\n    return ${expected}`);
+    expect(brycomp.templateDots(host, `def __brycomp_expr_0_late(row):\n    return ${body}`)).toBe(`def __brycomp_expr_0_late(row):\n    return ${expected}`);
 });
