@@ -145,7 +145,7 @@ export {
 } from './translation.js';
 
 // Python's scopes over a module.
-export { BODIES, walkScoped, symbolTable, scopeIn, isGlobalScope, moduleBinds, globalReads } from './scopes.js';
+export { BODIES, walkScoped, symbolTable, scopeIn, isGlobalScope, moduleBinds, builtinIn, globalReads } from './scopes.js';
 
 // What a module exports.
 export {
