@@ -30,7 +30,7 @@
     "bryvend": "~3.14.3"
   },
   "devDependencies": {
-    "bryvend": "~3.14.3",
+    "bryvend": "file:../bryvend",
     "vitest": "^4.1.12"
   }
 }
