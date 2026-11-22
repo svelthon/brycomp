@@ -121,6 +121,7 @@ function templateDots(host, def) {
     };
 
     const seen = new WeakSet();
+    const given = new WeakSet();
 
     // Python's scopes, not the tree's: every child of a node does not see the
     // same names. A lambda's defaults are read where the lambda is written and
@@ -252,7 +253,13 @@ function templateDots(host, def) {
         // included, as Python keeps it; and a debug field's label, as an
         // f-string's, whose `=` becomes the `!r` it stands for when nothing
         // else follows. A host with no `templateText` keeps the text rewritten.
-        if (node instanceof $B.ast.TemplateStr && templateText !== undefined && node.values.some((one) => one instanceof $B.ast.Interpolation)) {
+        // One the host's own pass already handed over as written, a walrus's
+        // field rewritten, is left in that call (`given`).
+        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === templateText && node.args[0] instanceof $B.ast.TemplateStr) {
+            given.add(node.args[0]);
+        }
+
+        if (node instanceof $B.ast.TemplateStr && templateText !== undefined && !given.has(node) && node.values.some((one) => one instanceof $B.ast.Interpolation)) {
             const expressions = [];
             const labels = [];
 
