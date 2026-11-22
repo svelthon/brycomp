@@ -4,14 +4,14 @@
 // cannot export, each name exported live, and the body run when the module is
 // imported.
 import { test, expect } from 'vitest';
-import * as bryc from '../src/brycomp.js';
+import * as brycomp from '../src/brycomp.js';
 
 const host = {
     name: 'host',
     runtime: { jsGlobal: 'globalThis', liveExport: 'liveExport', pyExport: 'pyExport', pythonModule: 'pythonModule' }
 };
-const NS = bryc.NS;
-const next = bryc.NEXT_VALUE;
+const NS = brycomp.NS;
+const next = brycomp.NEXT_VALUE;
 
 // **What a module exports is what `__all__` holds once its top-level
 // statements have run**, as `from m import *` obeys it: each statement that
@@ -23,9 +23,9 @@ const next = bryc.NEXT_VALUE;
 const source = 'src/probe.py';
 
 const exported = (src, lineOffset = 0) => {
-    const { root, table } = bryc.compile(host, src, { name: 'probe', source });
+    const { root, table } = brycomp.compile(host, src, { name: 'probe', source });
 
-    return bryc.declaredExports(host, root._ast, table, source, lineOffset, src);
+    return brycomp.declaredExports(host, root._ast, table, source, lineOffset, src);
 };
 
 test('the list the module ends with, run as Python runs it', () => {
@@ -227,7 +227,7 @@ test('a raise at import is refused where it is raised', () => {
 // not yet bound waits, and is refused once the body has run if the star did not
 // bring it.
 const checks = (names, more = {}) =>
-    bryc.exportChecks(host, {
+    brycomp.exportChecks(host, {
         declaration: { names, line: 4 },
         declared: ['load'],
         binds: new Set(['save']),
@@ -264,9 +264,9 @@ test.for([
     ['def fill():\n    global entry\nfill()', false],
     ['def fill():\n    entry = 42\nfill()', false]
 ])('`%s` binds entry in the module: %s', ([src, binds]) => {
-    const { table } = bryc.compile(host, `${src}\n`, { name: 'probe', source });
+    const { table } = brycomp.compile(host, `${src}\n`, { name: 'probe', source });
 
-    expect(bryc.moduleBinds(table).has('entry')).toBe(binds);
+    expect(brycomp.moduleBinds(table).has('entry')).toBe(binds);
 });
 
 test('a name the module never binds is refused at the list', () => {
@@ -282,7 +282,7 @@ test('with a star import, a name not yet bound waits, and is refused once the bo
     const { unbound, listedAt } = checks(['load', 'later'], { starred: true });
 
     expect(unbound).toEqual(['later']);
-    expect(bryc.unboundRefusals(host, unbound, listedAt)).toEqual([
+    expect(brycomp.unboundRefusals(host, unbound, listedAt)).toEqual([
         `if (${NS}["later"] === undefined) throw new globalThis.Error(${JSON.stringify(
             'host — `__all__` names `later`, which this module never binds (src/a.py:4). A module exports what it defines: check the spelling, or remove it from the list.'
         )});`
@@ -297,8 +297,8 @@ test('with a star import, a name not yet bound waits, and is refused once the bo
 const module = { exported: ['load', 'navigate'], jsImported: ['navigate'], source: 'src/+page.server.py' };
 
 test('each name exported live, a JavaScript import as its own binding', () => {
-    expect(bryc.moduleExports(host, module)).toEqual(['let __export_load;', 'export { __export_load as load, navigate };']);
-    expect(bryc.liveExportLines(host, module)).toEqual([
+    expect(brycomp.moduleExports(host, module)).toEqual(['let __export_load;', 'export { __export_load as load, navigate };']);
+    expect(brycomp.liveExportLines(host, module)).toEqual([
         `liveExport(${NS}, "load", (__value) => { __export_load = pyExport(__value, "load — src/+page.server.py"); });`
     ]);
 });
@@ -308,11 +308,11 @@ test('each name exported live, a JavaScript import as its own binding', () => {
 test('an import named like one of the framework’s words is re-exported from its variable', () => {
     const runes = { ...host, runes: ['effect'] };
 
-    expect(bryc.moduleExports(runes, { exported: ['effect'], jsImported: ['effect'] })).toEqual(['export { __import_effect as effect };']);
+    expect(brycomp.moduleExports(runes, { exported: ['effect'], jsImported: ['effect'] })).toEqual(['export { __import_effect as effect };']);
 });
 
 test('a module that exports nothing writes no export', () => {
-    expect(bryc.moduleExports(host, { exported: [], jsImported: [] })).toEqual([]);
+    expect(brycomp.moduleExports(host, { exported: [], jsImported: [] })).toEqual([]);
 });
 
 // **A module's body runs when it is imported, not when it is evaluated**: a
@@ -322,7 +322,7 @@ test('a module that exports nothing writes no export', () => {
 // module runs it as it is evaluated, and exports no default. A name no
 // `import` can write is published under none.
 test('a default export that runs the body when the module is imported', () => {
-    expect(bryc.moduleLoad(host, { name: 'cart', run: [`init(${NS});`, '', 'done();'], renewed: ['roots = fresh();'] })).toEqual([
+    expect(brycomp.moduleLoad(host, { name: 'cart', run: [`init(${NS});`, '', 'done();'], renewed: ['roots = fresh();'] })).toEqual([
         '',
         `export default pythonModule(${NS}, "cart", (${next}) => { ${NS} = ${next}; roots = fresh(); }, () => {`,
         `    init(${NS});`,
@@ -333,7 +333,7 @@ test('a default export that runs the body when the module is imported', () => {
 });
 
 test('an eager module runs it as it is evaluated, and a name no import writes is none', () => {
-    const lines = bryc.moduleLoad(host, { name: '+page.server', eager: true, run: ['go();'] });
+    const lines = brycomp.moduleLoad(host, { name: '+page.server', eager: true, run: ['go();'] });
 
     expect(lines[1]).toBe(`pythonModule(${NS}, null, (${next}) => { ${NS} = ${next}; }, () => {`);
     expect(lines.at(-1)).toBe('})();');
@@ -342,7 +342,7 @@ test('an eager module runs it as it is evaluated, and a name no import writes is
 // A name each part of which is an identifier is one `import` writes, a dotted
 // one too; a part empty or no identifier makes it none.
 test('a qualified module name is published, and one no import writes is none', () => {
-    const published = (name) => bryc.moduleLoad(host, { name, run: [] })[1].split(', ')[1];
+    const published = (name) => brycomp.moduleLoad(host, { name, run: [] })[1].split(', ')[1];
 
     expect(['shop.worker', 'a.sub.worker', 'équipe.outil', 'cart'].map(published)).toEqual([
         '"shop.worker"',

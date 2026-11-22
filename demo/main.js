@@ -252,22 +252,22 @@ const attempt = (run) => {
 };
 
 const brython = (text) => attempt(() => ({ js: $B.py2js({ src: text, filename: 'demo.py' }, 'demo', ['demo']).to_js() }));
-const bryc = (text) => attempt(() => compile(host, text, { name: 'demo', source: 'demo.py', sourceContent: text }));
+const brycomp = (text) => attempt(() => compile(host, text, { name: 'demo', source: 'demo.py', sourceContent: text }));
 
-let view = 'bryc';
+let view = 'brycomp';
 let last;
 
 const SAYS = {
-    bryc: 'What <code>compile()</code> hands the framework, each line with the Python line its source map points to.',
+    brycomp: 'What <code>compile()</code> hands the framework, each line with the Python line its source map points to.',
     brython: "What Brython's own <code>py2js</code> writes for the same source: a script, with no line of Python to point to."
 };
 
 function render() {
     const { plain, ours } = last;
-    const shown = view === 'bryc' ? ours : plain;
+    const shown = view === 'brycomp' ? ours : plain;
 
     $('view-says').innerHTML = SAYS[view];
-    $('view-bryc').setAttribute('aria-pressed', String(view === 'bryc'));
+    $('view-brycomp').setAttribute('aria-pressed', String(view === 'brycomp'));
     $('view-brython').setAttribute('aria-pressed', String(view === 'brython'));
 
     if (shown.error) {
@@ -297,7 +297,7 @@ function render() {
 
 // What Brycomp adds, each row measured on the source as typed.
 function adds(text, plain, ours) {
-    const again = { plain: brython(text), ours: bryc(text) };
+    const again = { plain: brython(text), ours: brycomp(text) };
     const same = (one, two) => !one.error && !two.error && (one.module ?? one.js) === (two.module ?? two.js);
     const cell = (good, html) => `<td class="${good ? 'gain' : 'loss'}">${html}</td>`;
     const rows = [];
@@ -355,7 +355,7 @@ function show() {
     number();
 
     const plain = brython(text);
-    const ours = bryc(text);
+    const ours = brycomp(text);
 
     last = { plain, ours };
     render();
@@ -367,8 +367,8 @@ function show() {
     $('refusal').className = ours.error ? 'refusal' : 'ok';
 }
 
-$('view-bryc').addEventListener('click', () => {
-    view = 'bryc';
+$('view-brycomp').addEventListener('click', () => {
+    view = 'brycomp';
     render();
 });
 $('view-brython').addEventListener('click', () => {

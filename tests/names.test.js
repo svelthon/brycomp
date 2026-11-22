@@ -4,7 +4,7 @@
 // JavaScript reserves, a name a JavaScript import brings, a word the host
 // reserves, and a module that does not ship.
 import { test, expect } from 'vitest';
-import * as bryc from '../src/brycomp.js';
+import * as brycomp from '../src/brycomp.js';
 
 const host = {
     name: 'host',
@@ -20,7 +20,7 @@ const host = {
     pathOption: 'dirs'
 };
 const source = 'src/a.py';
-const P = bryc.PROTO;
+const P = brycomp.PROTO;
 
 // **What the generated module cannot bind is refused on the line that binds
 // it**, under the host's name: a word JavaScript reserves, with the trailing
@@ -29,15 +29,15 @@ const P = bryc.PROTO;
 // a function that declares it `global`, and not where a function binds a name
 // of its own.
 test('a word JavaScript reserves is refused on its line, with the name Python writes instead', () => {
-    expect(() => bryc.refuseReserved(host, ['default'], source, new Map([['default', 2]]), 3)).toThrow(
+    expect(() => brycomp.refuseReserved(host, ['default'], source, new Map([['default', 2]]), 3)).toThrow(
         /^host — `default` is a reserved word in JavaScript, and the generated module cannot bind one \(src\/a\.py:5\)\. .* `default_`\.$/
     );
-    expect(() => bryc.refuseReserved(host, [], source, new Map())).not.toThrow();
+    expect(() => brycomp.refuseReserved(host, [], source, new Map())).not.toThrow();
 });
 
 // The module imports `navigate` from JavaScript on its first line, ten lines
 // into its file.
-const bound = (src) => () => bryc.compile(host, `__js__ = {"router": ["navigate"]}\n${src}`, { name: 'a', source, lineOffset: 10 });
+const bound = (src) => () => brycomp.compile(host, `__js__ = {"router": ["navigate"]}\n${src}`, { name: 'a', source, lineOffset: 10 });
 
 test("a JavaScript import bound by the module, or by a function's `global`, is refused on its line", () => {
     expect(bound('navigate = 2\n')).toThrow(/^host — `navigate` is a JavaScript import, which Python reads and never binds, .* \(src\/a\.py:12\)/);
@@ -52,7 +52,7 @@ test("a function's own name of that spelling binds nothing of the module's", () 
 // first list's names, imported as well, were refused by a module that no longer
 // exports them.
 test('a module named twice in `__js__` imports the last list alone', () => {
-    const { jsImports } = bryc.compile(host, '__js__ = {"./v.js": ["removed"], "./w.js": ["w"], "./v.js": ["kept"]}\n', { name: 'a', source });
+    const { jsImports } = brycomp.compile(host, '__js__ = {"./v.js": ["removed"], "./w.js": ["w"], "./v.js": ["kept"]}\n', { name: 'a', source });
 
     expect(jsImports.map((one) => [one.from, one.entries.map((entry) => entry.name)])).toEqual([
         ['./v.js', ['kept']],
@@ -63,7 +63,7 @@ test('a module named twice in `__js__` imports the last list alone', () => {
 // The module's path is the string Python reads, which the engine's tree holds
 // escaped for JavaScript.
 test('a path of `__js__` is the string Python reads, a quote and a backslash in it', () => {
-    const { jsImports } = bryc.compile(host, String.raw`__js__ = {"./O'Brien.js": ["a"], "./back\\slash.js": ["b"]}` + '\n', { name: 'a', source });
+    const { jsImports } = brycomp.compile(host, String.raw`__js__ = {"./O'Brien.js": ["a"], "./back\\slash.js": ["b"]}` + '\n', { name: 'a', source });
 
     expect(jsImports.map((one) => one.from)).toEqual(["./O'Brien.js", './back\\slash.js']);
 });
@@ -87,7 +87,7 @@ test.each([
     ['through one of its lists', '__js__ = {"./a.js": ["kept"]}\n__js__["./a.js"].append("more")\n', 2],
     ['deleted', '__js__ = {"./a.js": ["kept"]}\ndel __js__\n', 2]
 ])('`__js__` written %s is refused on its line', (form, src, line) => {
-    expect(() => bryc.compile(host, src, { name: 'a', source })).toThrow(new RegExp(`\`__js__\` is set by assigning it a dict .* \\(src/a\\.py:${line}\\)`));
+    expect(() => brycomp.compile(host, src, { name: 'a', source })).toThrow(new RegExp(`\`__js__\` is set by assigning it a dict .* \\(src/a\\.py:${line}\\)`));
 });
 
 // An entry that is no string names no import: it was left out, where the
@@ -97,7 +97,7 @@ test('an entry of `__js__` that is no string is refused, named, on the line of t
         ['["first", 27]', '`27`, an `int`'],
         ['[False]', '`False`, a `bool`']
     ]) {
-        expect(() => bryc.compile(host, `__js__ = {"./numbers.mjs": ${entries}}\n`, { name: 'a', source })).toThrow(
+        expect(() => brycomp.compile(host, `__js__ = {"./numbers.mjs": ${entries}}\n`, { name: 'a', source })).toThrow(
             `\`__js__\` lists ${shown}, for \`./numbers.mjs\`, and each entry is the name of an import, a string (src/a.py:1)`
         );
     }
@@ -106,11 +106,11 @@ test('an entry of `__js__` that is no string is refused, named, on the line of t
 // A builtin's name the directive imports is JavaScript's function, which may
 // change what it is handed: `list(__js__)` hands the dict on.
 test('`__js__` handed to a JavaScript import spelled like a builtin is refused, and to the builtin is read', () => {
-    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["list", "kept"]}\nlist(__js__)\n', { name: 'a', source })).toThrow(
+    expect(() => brycomp.compile(host, '__js__ = {"./api.mjs": ["list", "kept"]}\nlist(__js__)\n', { name: 'a', source })).toThrow(
         /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
     );
-    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source })).not.toThrow();
-    expect(() => bryc.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source, jsNames: ['list'] })).toThrow(
+    expect(() => brycomp.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source })).not.toThrow();
+    expect(() => brycomp.compile(host, '__js__ = {"./api.mjs": ["kept"]}\nlist(__js__)\n', { name: 'a', source, jsNames: ['list'] })).toThrow(
         /`__js__` is set by assigning it a dict/
     );
 });
@@ -121,9 +121,9 @@ test('a string of `__js__`, a copy of a list of it, and an unpacking of one are 
     const reads = ['x = __js__["./a.js"][0]', 'x = __js__["./a.js"][:]', 'first, = __js__["./a.js"]', 'first, *rest = __js__["./a.js"]', 'key, = __js__', 'x = ", ".join(__js__["./a.js"])'];
 
     for (const read of reads) {
-        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
+        expect(() => brycomp.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
     }
-    expect(() => bryc.compile(host, '__js__ = {"./a.js": ["kept"]}\nx, = [__js__["./a.js"]]\n', { name: 'a', source })).toThrow(
+    expect(() => brycomp.compile(host, '__js__ = {"./a.js": ["kept"]}\nx, = [__js__["./a.js"]]\n', { name: 'a', source })).toThrow(
         /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
     );
 });
@@ -132,10 +132,10 @@ test('a string of `__js__`, a copy of a list of it, and an unpacking of one are 
 // count, the keys of the dict. One that hands a list on does not.
 test('a method of `__js__` that only reads is a read, one that hands a list on is refused', () => {
     for (const read of ['x = __js__["./a.js"].copy()', 'n = __js__["./a.js"].index("kept")', 'keys = __js__.keys()', 'n = __js__.__len__()']) {
-        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
+        expect(() => brycomp.compile(host, `__js__ = {"./a.js": ["kept"]}\n${read}\n`, { name: 'a', source })).not.toThrow();
     }
     for (const handed of ['x = __js__.get("./a.js")', 'x = __js__.values()', 'x = __js__.copy()', 'x = __js__.__getitem__("./a.js")']) {
-        expect(() => bryc.compile(host, `__js__ = {"./a.js": ["kept"]}\n${handed}\n`, { name: 'a', source })).toThrow(
+        expect(() => brycomp.compile(host, `__js__ = {"./a.js": ["kept"]}\n${handed}\n`, { name: 'a', source })).toThrow(
             /`__js__` is set by assigning it a dict .* \(src\/a\.py:2\)/
         );
     }
@@ -144,15 +144,15 @@ test('a method of `__js__` that only reads is a read, one that hands a list on i
 test("`__js__` assigned at the top of the module is read, the last one counting, and a function's own is its own", () => {
     const src = '__js__ = {"./a.js": ["gone"]}\n__js__ = {"./a.js": ["kept"]}\nn = len(__js__["./a.js"])\n\ndef f():\n    __js__ = 1\n    return __js__\n';
 
-    expect(bryc.compile(host, src, { name: 'a', source }).jsImports.flatMap((one) => one.entries.map((entry) => entry.name))).toEqual(['kept']);
+    expect(brycomp.compile(host, src, { name: 'a', source }).jsImports.flatMap((one) => one.entries.map((entry) => entry.name))).toEqual(['kept']);
 });
 
 // **A name JavaScript gives the module is Python's spelling of it, to every
 // analysis that asks**: `ｏｐｅｎ` is `open`, called as the import, and bound as
 // one is refused.
 test('a JavaScript name is read in Python spelling, by the refusals as by the translation', () => {
-    expect(() => bryc.compile(host, 'observed = open("value")\n', { name: 'a', source, jsNames: ['ｏｐｅｎ'] })).not.toThrow();
-    expect(() => bryc.compile(host, 'observed = help("value")\n', { name: 'a', source, jsNames: ['ｈｅｌｐ'] })).not.toThrow();
+    expect(() => brycomp.compile(host, 'observed = open("value")\n', { name: 'a', source, jsNames: ['ｏｐｅｎ'] })).not.toThrow();
+    expect(() => brycomp.compile(host, 'observed = help("value")\n', { name: 'a', source, jsNames: ['ｈｅｌｐ'] })).not.toThrow();
     expect(bound('ｎａｖｉｇａｔｅ = 2\n')).toThrow(/`navigate` is a JavaScript import/);
 });
 
@@ -160,15 +160,15 @@ test('a JavaScript name is read in Python spelling, by the refusals as by the tr
 test('`importjsé` is a name, not the keyword', () => {
     const src = 'importjsé = 7\nobserved = importjsé\n';
 
-    expect(() => bryc.compile(host, src, { name: 'a', source })).not.toThrow();
-    expect(() => bryc.compile(host, src, { name: 'a', source, component: true })).not.toThrow();
+    expect(() => brycomp.compile(host, src, { name: 'a', source })).not.toThrow();
+    expect(() => brycomp.compile(host, src, { name: 'a', source, component: true })).not.toThrow();
 });
 
 // A walrus in a lambda binds the lambda's own name, its comprehension's too,
 // which no value of the template's stands for.
 test("a walrus in a lambda reads no name of the template's", () => {
-    expect(['(lambda: (x := 1))()', '(lambda: ((x := 1), x))()', '(lambda: ([(x := y) for y in [1]], x))()'].map(bryc.freeNames)).toEqual([[], [], []]);
-    expect([bryc.freeNames('(lambda y=x: y)()'), bryc.freeNames('(lambda: (lambda: (x := 1)) and x)()')]).toEqual([['x'], ['x']]);
+    expect(['(lambda: (x := 1))()', '(lambda: ((x := 1), x))()', '(lambda: ([(x := y) for y in [1]], x))()'].map(brycomp.freeNames)).toEqual([[], [], []]);
+    expect([brycomp.freeNames('(lambda y=x: y)()'), brycomp.freeNames('(lambda: (lambda: (x := 1)) and x)()')]).toEqual([['x'], ['x']]);
 });
 
 // **A name JavaScript gives the module is published to Python under the name
@@ -177,7 +177,7 @@ test("a walrus in a lambda reads no name of the template's", () => {
 // name Python declares itself wins, each is published once, and two names
 // Python reads as one are refused, under the host's name.
 test('an import read-only, a name of the JavaScript beside the module read and written', () => {
-    const lines = bryc.jsNameBindings(host, { jsImported: ['navigate'], declared: ['total'], source }, ['total', 'amount', 'navigate']);
+    const lines = brycomp.jsNameBindings(host, { jsImported: ['navigate'], declared: ['total'], source }, ['total', 'amount', 'navigate']);
 
     expect(lines).toEqual([
         `bind(${P}, 'navigate', () => jsCall(navigate), () => readOnly("navigate", "src/a.py"));`,
@@ -186,7 +186,7 @@ test('an import read-only, a name of the JavaScript beside the module read and w
 });
 
 test('under the name Python reads', () => {
-    expect(bryc.jsNameBindings(host, { jsImported: [], declared: [], source: 'a.py' }, ['ﬁeld'])).toEqual([`bind(${P}, 'field', () => jsCall(ﬁeld));`]);
+    expect(brycomp.jsNameBindings(host, { jsImported: [], declared: [], source: 'a.py' }, ['ﬁeld'])).toEqual([`bind(${P}, 'field', () => jsCall(ﬁeld));`]);
 });
 
 // A name of the JavaScript beside the module read as the host reads one: in a
@@ -194,7 +194,7 @@ test('under the name Python reads', () => {
 test('a name of the JavaScript beside the module is read as the host reads one', () => {
     const reading = { ...host, moduleName: (n) => `module[${JSON.stringify(n)}]` };
 
-    expect(bryc.jsNameBindings(reading, { jsImported: ['navigate'], declared: [], source }, ['amount', 'navigate'])).toEqual([
+    expect(brycomp.jsNameBindings(reading, { jsImported: ['navigate'], declared: [], source }, ['amount', 'navigate'])).toEqual([
         `bind(${P}, 'navigate', () => jsCall(navigate), () => readOnly("navigate", "src/a.py"));`,
         `bind(${P}, 'amount', () => jsCall(module["amount"]));`
     ]);
@@ -208,22 +208,22 @@ test('a name of the JavaScript beside the module is read as the host reads one',
 test("an import named like one of the framework's words is imported under another variable, read by Python under its own", () => {
     const runes = { ...host, runes: ['effect', 'state'] };
 
-    expect(bryc.jsImportLine(runes, { from: './x.js', kind: 'named', entries: [{ name: 'effect', local: 'effect' }, { name: 'go', local: 'go' }] })).toBe(
+    expect(brycomp.jsImportLine(runes, { from: './x.js', kind: 'named', entries: [{ name: 'effect', local: 'effect' }, { name: 'go', local: 'go' }] })).toBe(
         'import { effect as __import_effect, go } from "./x.js";'
     );
-    expect(bryc.jsImportLine(runes, { from: './x.js', kind: 'default', entries: [{ name: 'default', local: 'state' }] })).toBe('import __import_state from "./x.js";');
-    expect(bryc.jsNameBindings(runes, { jsImported: ['effect'], declared: [], source }, ['state'])).toEqual([
+    expect(brycomp.jsImportLine(runes, { from: './x.js', kind: 'default', entries: [{ name: 'default', local: 'state' }] })).toBe('import __import_state from "./x.js";');
+    expect(brycomp.jsNameBindings(runes, { jsImported: ['effect'], declared: [], source }, ['state'])).toEqual([
         `bind(${P}, 'effect', () => jsCall(__import_effect), () => readOnly("effect", "src/a.py"));`,
         `bind(${P}, 'state', () => jsCall(state));`
     ]);
 });
 
 test('without the member, every import keeps its name', () => {
-    expect(bryc.jsImportLine(host, { from: './x.js', kind: 'named', entries: [{ name: 'effect', local: 'effect' }] })).toBe('import { effect } from "./x.js";');
+    expect(brycomp.jsImportLine(host, { from: './x.js', kind: 'named', entries: [{ name: 'effect', local: 'effect' }] })).toBe('import { effect } from "./x.js";');
 });
 
 test('two names Python reads as one are refused', () => {
-    expect(() => bryc.jsNameBindings(host, { jsImported: [], declared: [], source: 'a.py' }, ['field', 'ﬁeld'])).toThrow(
+    expect(() => brycomp.jsNameBindings(host, { jsImported: [], declared: [], source: 'a.py' }, ['field', 'ﬁeld'])).toThrow(
         /^host — `field` and `ﬁeld` are two JavaScript names Python reads as one, `field` \(a\.py\)/
     );
 });
@@ -236,7 +236,7 @@ const lines = new Map([['derived', 3]]);
 
 const refusal = (declared, component) => {
     try {
-        bryc.refuseHostWords(host, declared, component, source, lines, 10);
+        brycomp.refuseHostWords(host, declared, component, source, lines, 10);
     } catch (error) {
         return error;
     }
@@ -266,7 +266,7 @@ test("a word the host does not reserve is the author's", () => {
 // on. A module the runtime holds, or a file of the project, is imported as
 // written.
 const missing = (module, resolves = () => undefined) => () =>
-    bryc.compile(host, `x = 1\nimport ${module}\n`, { name: 'a', source, lineOffset: 10, resolves });
+    brycomp.compile(host, `x = 1\nimport ${module}\n`, { name: 'a', source, lineOffset: 10, resolves });
 
 test('a module that does not ship is refused on its line, with what the host says stands in for it', () => {
     expect(missing('json')).toThrow(
@@ -287,11 +287,11 @@ test.for([
     'from records import Record\nresult = Record(5).__reduce_ex__(2)',
     'import records\nresult = records.Record(5).__reduce__()'
 ])('a reduction of an instance of a class imported from a module beside it compiles: %s', (written) => {
-    expect(() => bryc.compile(host, `${written}\n`, { name: 'a', source, resolves: () => 'file' })).not.toThrow();
+    expect(() => brycomp.compile(host, `${written}\n`, { name: 'a', source, resolves: () => 'file' })).not.toThrow();
 });
 
 test("object's reduction is still refused", () => {
-    expect(() => bryc.compile(host, 'result = object().__reduce__()\n', { name: 'a', source })).toThrow(/`__reduce__\(\)` builds its answer with `copyreg`/);
+    expect(() => brycomp.compile(host, 'result = object().__reduce__()\n', { name: 'a', source })).toThrow(/`__reduce__\(\)` builds its answer with `copyreg`/);
 });
 
 // Nor is an instance of a class of the module that may be another object, or
@@ -306,7 +306,7 @@ test.for([
     ['__init__', 'class Proxy:\n    def __init__(self):\n        self.__reduce__ = lambda: (Record, (42,))\n'],
     ['__getattribute__', 'class Proxy:\n    def __getattribute__(self, name):\n        return lambda: (Record, (42,))\n']
 ])('a class whose instance may hold its own reduction, by %s, compiles', ([, proxy]) => {
-    expect(() => bryc.compile(host, `${RECORD}${proxy}result = Proxy().__reduce__()[1][0]\n`, { name: 'a', source })).not.toThrow();
+    expect(() => brycomp.compile(host, `${RECORD}${proxy}result = Proxy().__reduce__()[1][0]\n`, { name: 'a', source })).not.toThrow();
 });
 
 // What the host says stands in is read among its own names: a module named like

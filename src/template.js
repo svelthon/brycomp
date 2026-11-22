@@ -56,7 +56,7 @@ function templateDots(host, def) {
             if (def[i] === '#') while (i < def.length && def[i] !== '\n') i += 1;
             else i += 1;
         }
-        if (i >= def.length) throw new Error(`bryc — no \`${sign}\` found where a template expression has one`);
+        if (i >= def.length) throw new Error(`brycomp — no \`${sign}\` found where a template expression has one`);
         return i;
     };
 

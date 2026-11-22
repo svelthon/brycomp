@@ -9,14 +9,14 @@
 // function binds, and every operation of a host that names none, stay the
 // engine's own; and so does every compile after, even one that raised.
 import { test, expect } from 'vitest';
-import * as bryc from '../src/brycomp.js';
+import * as brycomp from '../src/brycomp.js';
 
 const host = {
     name: 'host',
     runtime: { jsGlobal: 'globalThis', liveExport: 'liveExport', pyExport: 'pyExport', pythonModule: 'pythonModule' }
 };
 const options = { name: 'probe', source: 'src/probe.py' };
-const emitted = (body, fast) => bryc.compile(fast ? { ...host, fast: '$fastOps' } : host, `def f(d, k):\n    return ${body}\n`, options).module;
+const emitted = (body, fast) => brycomp.compile(fast ? { ...host, fast: '$fastOps' } : host, `def f(d, k):\n    return ${body}\n`, options).module;
 
 test.for([
     ['d[k]', '$B.$fastOps.item('],
@@ -52,10 +52,10 @@ test.for([
     ['id', 'the module', 'id = len\ndef f(d):\n    return id(d)\n'],
     ['id', 'the function', 'def f(d, id):\n    return id(d)\n']
 ])('an %s %s binds stays its own', ([, , source]) => {
-    expect(bryc.compile({ ...host, fast: '$fastOps' }, source, options).module).not.toContain('$fastOps');
+    expect(brycomp.compile({ ...host, fast: '$fastOps' }, source, options).module).not.toContain('$fastOps');
 });
 
 test('a compile after one that raised is the engine own', () => {
-    expect(() => bryc.compile({ ...host, fast: '$fastOps' }, 'return 1\n', options)).toThrow();
+    expect(() => brycomp.compile({ ...host, fast: '$fastOps' }, 'return 1\n', options)).toThrow();
     expect(emitted('d[k] == d.get(k)', false)).not.toContain('$fastOps');
 });
