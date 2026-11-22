@@ -48,12 +48,25 @@ export function atomic(source, at, onField) {
     // brackets alone read the `:` of `f"{ {'x': '}'} }"` as a specification's,
     // and the brace inside that string then closed something.
     const formatted = interpolated(source, at);
+    const raw = /[rR]/.test(prefixOf(source, at));
     const frames = [];
     const inner = () => frames[frames.length - 1];
 
     for (let i = at + fence.length; i < source.length; i++) {
         const here = formatted ? inner() : undefined;
         const spec = here !== undefined && here.spec;
+
+        // A named escape, `\N{GREEK SMALL LETTER PI}`, is one character of the
+        // text or of a specification, its braces no field's; a raw string has
+        // none, and `rf"\N{x}"` reads `x`.
+        if (formatted && !raw && (frames.length === 0 || spec) && source.startsWith('\\N{', i)) {
+            const close = source.indexOf('}', i);
+
+            if (close !== -1) {
+                i = close;
+                continue;
+            }
+        }
 
         // A backslash hides the character after it, so that `"\""` is one string
         // and not two, **except a brace**, which it cannot hide: the escape for
@@ -111,10 +124,16 @@ export function atomic(source, at, onField) {
     return source.length - at;
 }
 
-// Whether the quote at `at` opens an f-string, read from the prefix letters
-// before it. Two at most (`rf`, `fr`), and not the tail of a longer name, so
-// the `f` of `def"` is not one.
+// Whether the quote at `at` opens an f-string, or a t-string (PEP 750), which
+// has the fields of one.
 function interpolated(source, at) {
+    return /[fFtT]/.test(prefixOf(source, at));
+}
+
+// The prefix letters of the literal whose quote is at `at`: two at most
+// (`rf`, `fr`), and none for the tail of a longer name, so the `f` of `def"`
+// is not one.
+function prefixOf(source, at) {
     let i = at - 1;
     let prefix = '';
 
@@ -123,10 +142,7 @@ function interpolated(source, at) {
         i--;
     }
 
-    if (i >= 0 && /[A-Za-z0-9_]/.test(source[i])) return false;
-
-    // A t-string (PEP 750) has the fields of an f-string.
-    return /[fFtT]/.test(prefix);
+    return i >= 0 && /[A-Za-z0-9_]/.test(source[i]) ? '' : prefix;
 }
 
 // `source` with every comment and string literal replaced by what `replace`
