@@ -259,7 +259,13 @@ function templateDots(host, def) {
             given.add(node.args[0]);
         }
 
-        if (node instanceof $B.ast.TemplateStr && templateText !== undefined && !given.has(node) && node.values.some((one) => one instanceof $B.ast.Interpolation)) {
+        // Where the parser placed it: a string between triple quotes, or a
+        // field on a line after its first, is placed past where it stands, and
+        // wrapped there, it no longer compiled. Left as it was written.
+        const placed = (one) =>
+            /^[A-Za-z]+['"]/.test(def.slice(begin(one))) && one.values.every((field) => !(field instanceof $B.ast.Interpolation) || def[begin(field)] === '{');
+
+        if (node instanceof $B.ast.TemplateStr && templateText !== undefined && !given.has(node) && node.values.some((one) => one instanceof $B.ast.Interpolation) && placed(node)) {
             const expressions = [];
             const labels = [];
 
