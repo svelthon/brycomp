@@ -32,7 +32,7 @@ const GIVEN = '__brycomp_given';
 // from Brython's own parser, in characters, f-string fields included, and no
 // line is added, so a function keeps the lines its markup was given.
 function templateDots(host, def) {
-    const { readAttr, writeAttr } = host.runtime;
+    const { readAttr, writeAttr, templateText } = host.runtime;
     const $B = engine();
     let tree;
 
@@ -242,6 +242,46 @@ function templateDots(host, def) {
             });
         }
 
+        // A t-string's `Template` keeps the text it was written with, which
+        // the rewrite changes: its `strings` and each interpolation's
+        // `.expression` showed the call the rewrite wrote,
+        // `readAttr(row, "name")`, where Python shows `row.name`. Handed to the
+        // host's `templateText` as written, read off the source: each
+        // expression, all that stands between the brace and what ends it, an
+        // `=`, a `!`, a `:` or the closing brace, its spaces and parentheses
+        // included, as Python keeps it; and a debug field's label, as an
+        // f-string's, whose `=` becomes the `!r` it stands for when nothing
+        // else follows. A host with no `templateText` keeps the text rewritten.
+        if (node instanceof $B.ast.TemplateStr && templateText !== undefined && node.values.some((one) => one instanceof $B.ast.Interpolation)) {
+            const expressions = [];
+            const labels = [];
+
+            // The `=` is read off the source, where the expression ends: the
+            // parser joins a debug field's label to the text before it,
+            // `t"x: {row.name=}"`, in one constant placed nowhere.
+            node.values.forEach((field) => {
+                if (!(field instanceof $B.ast.Interpolation)) return;
+
+                let close = end(field.value);
+
+                while (close < def.length && !'=!:}'.includes(def[close])) close += 1;
+                expressions.push(def.slice(begin(field) + 1, close));
+
+                if (def[close] !== '=') {
+                    labels.push('');
+                    return;
+                }
+
+                let after = close + 1;
+
+                while (/\s/.test(def[after] ?? '')) after += 1;
+                labels.push(def.slice(begin(field) + 1, after));
+                replace(close, after, def[after] === '}' ? '!r' : '');
+            });
+
+            wrap(node, `${templateText}(`, `, ${JSON.stringify(expressions)}, ${JSON.stringify(labels)})`);
+        }
+
         for (const key of Object.keys(node)) if (key !== 'parent') visit(node[key], shadowed);
     };
 
@@ -252,7 +292,7 @@ function templateDots(host, def) {
     // lambda's or a comprehension's, a walrus, a `def`, an import. Refused,
     // as the host's helper cannot be reached from there.
     if (edits.length) {
-        const helpers = new Set([readAttr, writeAttr]);
+        const helpers = new Set([readAttr, writeAttr, templateText].filter((one) => one !== undefined));
         const walked = new Set();
         const binder = (node) => {
             if (!node || typeof node !== 'object' || walked.has(node)) return undefined;

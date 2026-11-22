@@ -595,6 +595,19 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     );
 });
 
+// A t-string is handed to the host's `templateText` with the text it was
+// written with, each expression and a debug field's label as the source has
+// them, its spaces and parentheses included, the `=` becoming the `!r` it
+// stands for: rewritten, its `strings` and `.expression` showed the call.
+test("a template's t-string is handed its runtime with the text it was written with", () => {
+    const writing = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr', templateText: 'templateText' } };
+    const shown = (text) => brycomp.templateDots(writing, `def __brycomp_expr_0(row):\n    return ${text}`).split('\n')[1];
+
+    expect(shown('t"{row.name=}"')).toBe('    return templateText(t"{readAttr(row, "name")!r}", ["row.name"], ["row.name="])');
+    expect(shown('t"a {(row.name)!s:>3} b"')).toBe('    return templateText(t"a {(readAttr(row, "name"))!s:>3} b", ["(row.name)"], [""])');
+    expect(shown('t"{ row.name = }"')).toBe('    return templateText(t"{ readAttr(row, "name") !r}", [" row.name "], [" row.name = "])');
+});
+
 // The value written is one argument, all that stands after the `=`: one in
 // parentheses of its own went before the object, `row(`, and a tuple handed
 // the helper four arguments.
