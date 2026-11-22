@@ -1,6 +1,6 @@
 {
   "name": "brycomp",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "The Brython compiler for JavaScript frameworks",
   "author": "Florent Gallaire <fgallaire@gmail.com>",
   "license": "BSD-3-Clause",
@@ -27,7 +27,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "bryvend": "~3.14.3"
+    "bryvend": "~3.14.31"
   },
   "devDependencies": {
     "bryvend": "file:../bryvend",
