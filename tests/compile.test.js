@@ -562,7 +562,10 @@ test("a host's template dot becomes its runtime's calls, under the names it give
 
     expect(brycomp.templateDots(named('__brycomp_getattr', '__brycomp_setattr'), read)).toBe('def __brycomp_expr_0(row):\n    return __brycomp_text(__brycomp_getattr(row, "name"))');
     expect(brycomp.templateDots(named('readAttr', 'writeAttr'), read)).toBe('def __brycomp_expr_0(row):\n    return __brycomp_text(readAttr(row, "name"))');
-    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), write)).toBe('def __brycomp_expr_set_0(value, row):\n    writeAttr(row, "label", (value))');
+    // The value evaluated first, as Python evaluates `=`'s, then the object.
+    expect(brycomp.templateDots(named('readAttr', 'writeAttr'), write)).toBe(
+        'def __brycomp_expr_set_0(value, row):\n    (lambda __brycomp_given: writeAttr(row, "label", __brycomp_given))((value))'
+    );
     // A dot over two lines keeps the second, so the next line stays its own.
     expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __brycomp_expr_0(row):\n    n = (row.\n         name)\n    return n')).toBe(
         'def __brycomp_expr_0(row):\n    n = (readAttr(row, "name"\n))\n    return n'
@@ -588,7 +591,7 @@ test("a host's template dot becomes its runtime's calls, under the names it give
     );
     // A comment after a parenthesised target is left out of what closes it.
     expect(brycomp.templateDots(named('readAttr', 'writeAttr'), 'def __brycomp_expr_set_0(value, row):\n    (row.label\n     # kept\n    ) = value')).toBe(
-        'def __brycomp_expr_set_0(value, row):\n    writeAttr((row), "label",\n\n (value))'
+        'def __brycomp_expr_set_0(value, row):\n    (lambda __brycomp_given: writeAttr((row), "label", __brycomp_given))(\n\n(value))'
     );
 });
 
@@ -599,10 +602,12 @@ test('a write in a template hands its runtime the whole value, grouped or a tupl
     const writing = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
     const set = (value) => brycomp.templateDots(writing, `def __brycomp_expr_set_0(value, row):\n    row.label = ${value}`).split('\n').slice(1).join('\n');
 
-    expect(set('(value)')).toBe('    writeAttr(row, "label", ((value)))');
-    expect(set('(value + 1)')).toBe('    writeAttr(row, "label", ((value + 1)))');
-    expect(set('value, 1')).toBe('    writeAttr(row, "label", (value, 1))');
-    expect(set('(\n        value\n    )')).toBe('    writeAttr(row, "label", ((\n        value\n    )))');
+    const written = (value) => `    (lambda __brycomp_given: writeAttr(row, "label", __brycomp_given))(${value})`;
+
+    expect(set('(value)')).toBe(written('((value))'));
+    expect(set('(value + 1)')).toBe(written('((value + 1))'));
+    expect(set('value, 1')).toBe(written('(value, 1)'));
+    expect(set('(\n        value\n    )')).toBe(written('((\n        value\n    ))'));
 });
 
 // A comprehension's target reads what it assigns into, `row` in

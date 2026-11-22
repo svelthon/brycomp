@@ -13,6 +13,9 @@ import { refuse } from './errors.js';
 // parameters arrive as functions.
 const EXPR_PREFIX = '__brycomp_expr_';
 
+// The value a write is handed (`templateDots`), under a name of the compiler's.
+const GIVEN = '__brycomp_given';
+
 // A host's template may give the dot a meaning of its own, a key found as well
 // as an attribute: `{pep.title}` reading a dict, where the same text in the
 // `<script>` stays plain Python and raises. That is the host's semantics, not
@@ -194,12 +197,17 @@ function templateDots(host, def) {
             // The value is one argument, all that stands after the `=`, which
             // may open a parenthesis of its own, `(value)`, or be a tuple,
             // `value, 1`.
+            //
+            // And evaluated first, as Python evaluates `=`'s: handed to a
+            // lambda whose body writes, `(lambda given: writeAttr(row,
+            // "label", given))((new))`. An argument after the object,
+            // `target().label = answer()` called `target` first.
             const equals = after(end(target), '=');
             const closers = def.slice(end(target), equals).replace(/#.*/g, '').replace(/\s/g, '');
             let value = equals + 1;
             while (def[value] === ' ' || def[value] === '\t') value += 1;
-            wrap(node, `${writeAttr}(`, '))');
-            replace(dot(target), value, `${closers}, ${JSON.stringify(target.attr)},${breaks(dot(target), value)} (`);
+            wrap(node, `(lambda ${GIVEN}: ${writeAttr}(`, '))');
+            replace(dot(target), value, `${closers}, ${JSON.stringify(target.attr)}, ${GIVEN}))(${breaks(dot(target), value)}(`);
             visit(target.value, shadowed);
             visit(node.value, shadowed);
             return;
