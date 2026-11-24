@@ -604,11 +604,15 @@ test("a template's t-string is handed its runtime with the text it was written w
     const shown = (text) => brycomp.templateDots(writing, `def __brycomp_expr_0(row):\n    return ${text}`).split('\n')[1];
 
     expect(shown('t"{row.name=}"')).toBe('    return templateText(t"{readAttr(row, "name")!r}", ["row.name"], ["row.name="])');
-    // One the parser places past where it stands, between triple quotes, is
-    // left as written: wrapped there, it no longer compiled.
-    expect(shown('t"""{x}"""')).toBe('    return t"""{x}"""');
+    // Between triple quotes, and on a line after the first.
+    expect(shown('t"""{x}"""')).toBe('    return templateText(t"""{x}""", ["x"], [""])');
     expect(shown('t"a {(row.name)!s:>3} b"')).toBe('    return templateText(t"a {(readAttr(row, "name"))!s:>3} b", ["(row.name)"], [""])');
     expect(shown('t"{ row.name = }"')).toBe('    return templateText(t"{ readAttr(row, "name") !r}", [" row.name "], [" row.name = "])');
+
+    const lines = (text) => brycomp.templateDots(writing, `def __brycomp_expr_0(row):\n    return ${text}`).split('\n').slice(1).join('\n');
+
+    expect(lines('t"""a\n{row.name}"""')).toBe('    return templateText(t"""a\n{readAttr(row, "name")}""", ["row.name"], [""])');
+    expect(lines('f"""a\n{row.name}"""')).toBe('    return f"""a\n{readAttr(row, "name")}"""');
 });
 
 // The value written is one argument, all that stands after the `=`: one in

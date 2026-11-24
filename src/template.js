@@ -259,9 +259,11 @@ function templateDots(host, def) {
             given.add(node.args[0]);
         }
 
-        // Where the parser placed it: a string between triple quotes, or a
-        // field on a line after its first, is placed past where it stands, and
-        // wrapped there, it no longer compiled. Left as it was written.
+        // Where the parser placed it. An engine without Brython's
+        // `fstring-triple-quote-start` and `fstring-next-line-column` places a
+        // string between triple quotes, or a field on a line after its first,
+        // past where it stands, and wrapped there, it no longer compiled: left
+        // as it was written.
         const placed = (one) =>
             /^[A-Za-z]+['"]/.test(def.slice(begin(one))) && one.values.every((field) => !(field instanceof $B.ast.Interpolation) || def[begin(field)] === '{');
 
