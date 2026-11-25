@@ -60,6 +60,31 @@ test('a module named twice in `__js__` imports the last list alone', () => {
     ]);
 });
 
+// JavaScript's renaming, `{Label as LabelPrimitive}`: the module binds a `Label`
+// of its own, and reads the import under the other name.
+test('an entry of `__js__` may rename its import, as JavaScript does', () => {
+    const { jsImports } = brycomp.compile(host, '__js__ = {"radix-ui": ["Label as LabelPrimitive", "Slot"]}\nLabel = LabelPrimitive\n', { name: 'a', source });
+
+    expect(jsImports[0].entries).toEqual([
+        { name: 'Label', local: 'LabelPrimitive' },
+        { name: 'Slot', local: 'Slot' }
+    ]);
+    expect(brycomp.jsImportLine(host, jsImports[0])).toBe('import { Label as LabelPrimitive, Slot } from "radix-ui";');
+    expect(() => brycomp.compile(host, '__js__ = {"radix-ui": ["Label as LabelPrimitive"]}\nLabelPrimitive = 1\n', { name: 'a', source })).toThrow(
+        /`LabelPrimitive` is a JavaScript import, which Python reads and never binds/
+    );
+});
+
+// `import Chart, * as Recharts from "recharts"`, as `__js__` writes it.
+test('an entry of `__js__` may import the default and the namespace', () => {
+    const { jsImports } = brycomp.compile(host, '__js__ = {"recharts": ["* as Recharts", "default as Chart"]}\n', { name: 'a', source });
+
+    expect(jsImports.map((one) => brycomp.jsImportLine(host, one))).toEqual([
+        'import { default as Chart } from "recharts";',
+        'import * as Recharts from "recharts";'
+    ]);
+});
+
 // The module's path is the string Python reads, which the engine's tree holds
 // escaped for JavaScript.
 test('a path of `__js__` is the string Python reads, a quote and a backslash in it', () => {

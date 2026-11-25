@@ -42,6 +42,16 @@ const NAMES = (node) => {
 const readable = (given) => given !== null && !given.includes(UNREADABLE);
 const strings = (given) => given.filter((one) => typeof one === 'string');
 
+// `"Label as LabelPrimitive"`, JavaScript's own renaming of an import: a module
+// that defines a `Label` of its own reads Radix's under another name.
+const RENAMED = /^\s*(\S+)\s+as\s+(\S+)\s*$/;
+
+const entryOf = (one) => {
+    const renamed = RENAMED.exec(one);
+
+    return renamed === null ? { name: one, local: one } : { name: renamed[1], local: renamed[2] };
+};
+
 // The text of a string constant, which the engine's parser keeps escaped for
 // JavaScript's single quotes: `\'` for `'`, `\\` for `\`, `\n` for a newline.
 const ESCAPED = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v' };
@@ -113,16 +123,17 @@ function declaredJsImports(host, ast, table, source, at = (line) => line) {
                 );
             }
 
-            // The same question `importjs` asks, with the same answer.
-            for (const one of strings(names)) {
-                const why = unbindable(one);
+            // The same question `importjs` asks, with the same answer, of the
+            // name Python reads.
+            for (const one of strings(names).map(entryOf)) {
+                const why = unbindable(one.local);
 
-                if (why !== null) refuseAt(node, `names \`${one}\`, ${why}`);
+                if (why !== null) refuseAt(node, `names \`${one.local}\`, ${why}`);
             }
 
-            lists.set(constantText(key.value), strings(names));
+            lists.set(constantText(key.value), strings(names).map(entryOf));
         });
-        modules = [...lists].map(([from, names]) => ({ from, names }));
+        modules = [...lists].map(([from, entries]) => ({ from, names: entries.map((one) => one.local), entries }));
     }
 
     // Read once the directive is: a builtin's name it imports is JavaScript's
@@ -367,14 +378,20 @@ function jsImportLine(host, one) {
 }
 
 // The JavaScript a source imports, both declarations met in one shape:
-// `__js__` is the module's and only ever names, `importjs` is the component's
-// (`lifted`, what `takeImportJs` took out of it) and covers the four forms.
+// `__js__` is the module's, names renamed or not, `"default as X"` among them,
+// and `"* as X"`, the namespace, on an import of its own; `importjs` is the
+// component's (`lifted`, what `takeImportJs` took out of it) and covers the
+// four forms.
 const jsImportsOf = (host, ast, table, source, at, lifted) => [
-    ...declaredJsImports(host, ast, table, source, at).map((one) => ({
-        from: one.from,
-        kind: 'named',
-        entries: one.names.map((n) => ({ name: n, local: n }))
-    })),
+    ...declaredJsImports(host, ast, table, source, at).flatMap((one) => {
+        const named = one.entries.filter((entry) => entry.name !== '*');
+        const whole = one.entries.filter((entry) => entry.name === '*');
+
+        return [
+            ...(named.length ? [{ from: one.from, kind: 'named', entries: named }] : []),
+            ...whole.map((entry) => ({ from: one.from, kind: 'namespace', entries: [entry] }))
+        ];
+    }),
     ...lifted
 ];
 
