@@ -14,28 +14,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Brycomp is developed against its neighbour ../bryvend: it is checked out
+  # beside it.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: brycomp
+
+      - name: Checkout the neighbour
+        run: git clone --depth 1 https://github.com/svelthon/bryvend.git
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
 
       - name: Install
-        run: npm ci
+        run: npm ci --prefix brycomp
 
       - name: Test
+        working-directory: brycomp
         run: npm test
 
   # The demo is served as it is: its page imports ../src and Bryvend from
-  # ../node_modules, so those sit beside it under the site root; / redirects to
-  # /demo/. Only from main, and only once the tests pass.
+  # ../node_modules, so those sit beside it under the site root (Bryvend copied
+  # through its link); / redirects to /demo/. Only from main, and only once the
+  # tests pass.
   build:
     needs: test
     if: github.event_name != 'pull_request'
@@ -44,27 +52,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: brycomp
+
+      - name: Checkout the neighbour
+        run: git clone --depth 1 https://github.com/svelthon/bryvend.git
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
 
       - name: Install
-        run: npm ci
+        run: npm ci --prefix brycomp
 
       - name: Stage site
+        working-directory: brycomp
         run: |
           mkdir -p _site/node_modules
           cp -r demo src _site/
-          cp -r node_modules/bryvend _site/node_modules/
+          cp -rL node_modules/bryvend _site/node_modules/
           printf '<!doctype html><meta http-equiv="refresh" content="0; url=demo/">' > _site/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: brycomp/_site
 
   deploy:
     needs: build
