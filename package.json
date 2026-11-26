@@ -1,12 +1,15 @@
 {
   "name": "brycomp",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The Brython compiler for JavaScript frameworks",
   "author": "Florent Gallaire <fgallaire@gmail.com>",
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/svelthon/brycomp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/svelthon/brycomp/issues"
   },
   "keywords": [
     "python",
