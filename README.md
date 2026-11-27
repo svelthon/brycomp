@@ -109,5 +109,7 @@ What Brycomp asks of the engine, member by member, is in `BRYTHON.md`.
 
 ## License
 
+Copyright (C) 2026 Florent Gallaire <fgallaire@gmail.com>
+
 Brycomp is licensed under the BSD 3-Clause License, the same license as
 Brython.
