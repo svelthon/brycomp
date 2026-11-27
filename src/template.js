@@ -16,6 +16,81 @@ const EXPR_PREFIX = '__brycomp_expr_';
 // The value a write is handed (`templateDots`), under a name of the compiler's.
 const GIVEN = '__brycomp_given';
 
+// The names a write through a dot is made plain with (`plainWrites`).
+const OBJECT = '__brycomp_object';
+const VALUE = '__brycomp_value';
+const PART = '__brycomp_part_';
+
+// The writes through a dot that a template of statements holds beyond
+// `obj.attr = value`, which a host's expressions cannot write and Vue's
+// handlers do: `row.qty += 1`, `a.x = b.y = v`, `row.a, row.b = pair`,
+// `row.a: int = v`. Each written as assignments to one target, in the order
+// Python makes them, the object read once, the value once, the operator in
+// place on what was read, and on as many lines, so that the rewrite reads and
+// writes each of their dots through the host's calls.
+function plainWrites($B, tree, def, begin, end) {
+    const text = (node) => def.slice(begin(node), end(node));
+    // A target's text, between parentheses where it runs over lines.
+    const target = (node) => (text(node).includes('\n') ? `(${text(node)})` : text(node));
+    const dotted = (node) =>
+        node instanceof $B.ast.Attribute || (node instanceof $B.ast.Starred ? dotted(node.value) : (node.elts ?? []).some(dotted));
+    // The value between parentheses, where the lines the statement ran over
+    // and its parts no longer do are put back (`\0`).
+    const value = (node) => `(${text(node)}\0)`;
+    let parts = 0;
+
+    // An unpacking's targets each a part of the compiler's, assigned after it
+    // in their order.
+    const pattern = (node, writes) => {
+        if (node instanceof $B.ast.Starred) return `*${pattern(node.value, writes)}`;
+        if (node instanceof $B.ast.Tuple || node instanceof $B.ast.List) return `[${node.elts.map((one) => pattern(one, writes)).join(', ')}]`;
+
+        const part = `${PART}${parts++}`;
+
+        writes.push(`${target(node)} = ${part}`);
+        return part;
+    };
+
+    const fixes = [];
+    const met = new WeakSet();
+    const walk = (node) => {
+        if (!node || typeof node !== 'object' || met.has(node)) return;
+        met.add(node);
+
+        let plain;
+
+        if (node instanceof $B.ast.AugAssign && node.target instanceof $B.ast.Attribute) {
+            const sign = def.slice(end(node.target), begin(node.value)).match(/(\*\*|\/\/|>>|<<|[-+*\/%@&|^])=/)[0];
+            const name = node.target.attr;
+
+            plain = `${OBJECT} = ${target(node.target.value)}; ${VALUE} = ${OBJECT}.${name}; ${VALUE} ${sign} ${value(node.value)}; ${OBJECT}.${name} = ${VALUE}`;
+        } else if (node instanceof $B.ast.AnnAssign && node.value && node.target instanceof $B.ast.Attribute) {
+            plain = `${target(node.target)} = ${value(node.value)}`;
+        } else if (node instanceof $B.ast.Assign && node.targets.some(dotted) && !(node.targets.length === 1 && node.targets[0] instanceof $B.ast.Attribute)) {
+            const statements = [`${VALUE} = ${value(node.value)}`];
+
+            for (const one of node.targets) {
+                const writes = [];
+
+                if (one instanceof $B.ast.Tuple || one instanceof $B.ast.List) statements.push(`${pattern(one, writes)} = ${VALUE}`, ...writes);
+                else statements.push(`${target(one)} = ${VALUE}`);
+            }
+            plain = statements.join('; ');
+        }
+
+        if (plain !== undefined) {
+            const missing = text(node).split('\n').length - plain.split('\n').length;
+
+            fixes.push({ from: begin(node), to: end(node), text: plain.replace('\0', '\n'.repeat(Math.max(0, missing))) });
+            return;
+        }
+        for (const key of Object.keys(node)) if (key !== 'parent' && key !== '$parent') walk(node[key]);
+    };
+
+    walk(tree);
+    return fixes.sort((one, other) => other.from - one.from).reduce((out, one) => out.slice(0, one.from) + one.text + out.slice(one.to), def);
+}
+
 // A host's template may give the dot a meaning of its own, a key found as well
 // as an attribute: `{pep.title}` reading a dict, where the same text in the
 // `<script>` stays plain Python and raises. That is the host's semantics, not
@@ -26,6 +101,7 @@ const GIVEN = '__brycomp_given';
 // functions the template's pass wrote: every attribute read becomes a call to
 // the host's `readAttr`, `readAttr(value, "name")`, and the assignment a
 // binding writes a call to its `writeAttr`, `writeAttr(value, "name", new)`,
+// as every other write through a dot does once made plain (`plainWrites`),
 // each under the name the host's runtime gives it (`host.runtime`). A function
 // of the script that the template calls keeps plain Python, and a lambda
 // written in the template keeps the rule however late it runs. The places come
@@ -48,6 +124,10 @@ function templateDots(host, def) {
 
     const begin = (node) => starts[node.lineno - 1] + node.col_offset;
     const end = (node) => starts[node.end_lineno - 1] + node.end_col_offset;
+
+    const plain = plainWrites($B, tree, def, begin, end);
+
+    if (plain !== def) return templateDots(host, plain);
 
     // The first `sign` from a place on, across the spaces, closing parentheses
     // and comments before it, whose own sign, `# profile.name`, is none.

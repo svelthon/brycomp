@@ -630,6 +630,31 @@ test('a write in a template hands its runtime the whole value, grouped or a tupl
     expect(set('(\n        value\n    )')).toBe(written('((\n        value\n    ))'));
 });
 
+// A template of statements, Vue's handlers, writes through a dot as Python
+// writes an attribute, each write its runtime's call: in place, to several
+// targets, unpacked, annotated. The object read once, the value once, in
+// Python's order, on as many lines.
+test('a write through a dot in a statement is its runtime\'s call, however Python writes it', () => {
+    const writing = { ...host, runtime: { ...host.runtime, readAttr: 'readAttr', writeAttr: 'writeAttr' } };
+    const handled = (body) => brycomp.templateDots(writing, `def __brycomp_expr_0(event, row):\n    ${body}`).split('\n').slice(1).join('\n');
+    const write = (object, name, value) => `(lambda __brycomp_given: writeAttr(${object}, "${name}", __brycomp_given))((${value}))`;
+
+    expect(handled('row.qty += 1')).toBe(
+        `    __brycomp_object = row; __brycomp_value = readAttr(__brycomp_object, "qty"); __brycomp_value += (1); ${write('__brycomp_object', 'qty', '__brycomp_value')}`
+    );
+    expect(handled('row.qty -= (\n        1\n    )')).toBe(
+        `    __brycomp_object = row; __brycomp_value = readAttr(__brycomp_object, "qty"); __brycomp_value -= (1\n\n); ${write('__brycomp_object', 'qty', '__brycomp_value')}`
+    );
+    expect(handled('a.x = b.y = v')).toBe(`    __brycomp_value = (v); ${write('a', 'x', '__brycomp_value')}; ${write('b', 'y', '__brycomp_value')}`);
+    expect(handled('row.a, (row.b, *rest) = v')).toBe(
+        `    __brycomp_value = (v); [__brycomp_part_0, [__brycomp_part_1, *__brycomp_part_2]] = __brycomp_value; ${write('row', 'a', '__brycomp_part_0')}; ${write('row', 'b', '__brycomp_part_1')}; rest = __brycomp_part_2`
+    );
+    expect(handled('row.a: int = v')).toBe(`    ${write('row', 'a', '(v)')}`);
+    expect(handled('if ok: row.qty += 1; done = 1')).toBe(
+        `    if ok: __brycomp_object = row; __brycomp_value = readAttr(__brycomp_object, "qty"); __brycomp_value += (1); ${write('__brycomp_object', 'qty', '__brycomp_value')}; done = 1`
+    );
+});
+
 // A comprehension's target reads what it assigns into, `row` in
 // `for row["flag"] in …`, at each step: a parameter handed late is read there
 // as everywhere, a call, where the target was left as it was and assigned
